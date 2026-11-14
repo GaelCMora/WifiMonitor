@@ -61,6 +61,8 @@ function deviceList() {
     firstSeen: d.firstSeen, lastSeen: d.lastSeen, lastChange: d.lastChange, name: mon.deviceName(d),
     alias: mon.settings.aliases[d.mac] || mon.settings.aliases[d.ip] || '', place: mon.settings.places[d.ip] || '',
     history: (d.history || []).slice(-40),
+    client: (d.mac && mon.settings.clients[d.mac]) || null,
+    trusted: !!(d.mac && mon.settings.trusted[d.mac]) || d.kind === 'self' || d.kind === 'modem' || d.ip === mon.net.gateway,
   })).sort((a, b) => (b.online - a.online) || ipNum(a.ip) - ipNum(b.ip));
 }
 function ipNum(ip) { return ip.split('.').reduce((n, p) => n * 256 + (+p || 0), 0); }
@@ -219,6 +221,19 @@ async function handle(req, res) {
       mon.saveSettings();
       return send(res, 200, { ok: true });
     }
+    if (p === '/api/clients' && req.method === 'POST') {
+      const b = await readBody(req, 256 * 1024);
+      const found = mon.importClients(String(b.text || ''), String(b.ap || ''), String(b.band || '2.4'));
+      return send(res, 200, { ok: true, count: found.length, found });
+    }
+    if (p === '/api/trust' && req.method === 'POST') {
+      const b = await readBody(req);
+      const mac = String(b.mac || '').toLowerCase().slice(0, 17);
+      if (!/^[0-9a-f:]{17}$/.test(mac)) return send(res, 400, { error: 'mac' });
+      if (b.trusted) mon.settings.trusted[mac] = true; else delete mon.settings.trusted[mac];
+      mon.saveSettings();
+      return send(res, 200, { ok: true });
+    }
     if (p === '/api/place' && req.method === 'POST') {
       const b = await readBody(req);
       const ip = String(b.ip || '').slice(0, 40);
@@ -255,6 +270,8 @@ async function handle(req, res) {
         rooms: (pl.rooms || []).slice(0, 60).map((r) => ({ id: String(r.id).slice(0, 12), name: String(r.name || 'Cuarto').slice(0, 40), x: num(r.x, 0), y: num(r.y, 0), w: num(r.w, 3), h: num(r.h, 3), floor: Math.max(0, Math.min(5, parseInt(r.floor, 10) || 0)) })),
         pins: Object.fromEntries(Object.entries(pl.pins || {}).slice(0, 30).map(([k, v]) => [String(k).slice(0, 40), { x: num(v.x, 0), y: num(v.y, 0), floor: Math.max(0, Math.min(5, parseInt(v.floor, 10) || 0)) }])),
         extra: (pl.extra || []).slice(0, 10).map((e) => ({ id: String(e.id).slice(0, 40), name: String(e.name || 'Repetidor').slice(0, 40) })),
+        devs: Object.fromEntries(Object.entries(pl.devs || {}).slice(0, 200).map(([k, v]) => [String(k).slice(0, 17), { x: num(v.x, 0), y: num(v.y, 0), floor: Math.max(0, Math.min(5, parseInt(v.floor, 10) || 0)) }])),
+        showDevs: pl.showDevs !== false,
         wallH: Math.max(2, Math.min(5, num(pl.wallH, 2.5))),
         model: pl.model && ['glb', 'gltf', 'stl', 'obj'].includes(pl.model.ext) ? {
           ext: pl.model.ext, name: String(pl.model.name || '').slice(0, 60), v: Number.isFinite(+pl.model.v) ? +pl.model.v : 0,

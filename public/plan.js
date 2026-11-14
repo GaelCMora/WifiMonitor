@@ -32,6 +32,7 @@ const Plan = (() => {
   let suggestion = null;    // {x,y,gain}
   let scale = 40;           // px por metro
   let drag = null;
+  let hover = null;          // dispositivo bajo el puntero (para dibujar su anillo)
   let saveT = null;
 
   const snap = (v) => Math.round(v / SNAP) * SNAP;
@@ -71,6 +72,7 @@ const Plan = (() => {
   function normalize() {
     plan.floors = plan.floors && plan.floors.length ? plan.floors : ['Planta baja'];
     plan.extra = plan.extra || [];
+    plan.devs = plan.devs || {};
     for (const r of plan.rooms) r.floor = Math.min(plan.floors.length - 1, r.floor || 0);
     for (const p of Object.values(plan.pins)) p.floor = Math.min(plan.floors.length - 1, p.floor || 0);
     cur = Math.min(cur, plan.floors.length - 1);
@@ -127,6 +129,43 @@ const Plan = (() => {
 
   function placedSources() {
     return routers().map((r) => plan.pins[r.id] && { ...plan.pins[r.id], id: r.id }).filter(Boolean);
+  }
+
+  // ------------------------------------------------- dispositivos en el plano
+  /** Distancia aproximada (m) a partir de la señal con la que el router escucha al aparato. */
+  function distFromRssi(rssi, b) {
+    if (rssi === null || rssi === undefined || rssi <= -95) return null;
+    const B = BANDS[b === '5' ? '5' : '2.4'];
+    // el celular transmite ~5 dB menos que el router; exponente algo mayor para contar paredes promedio
+    return Math.min(40, Math.max(0.8, Math.pow(10, (B.ref - 5 - rssi) / (10 * (B.n + 0.5)))));
+  }
+  function hashAngle(str) { let h = 0; for (const c of str) h = (h * 31 + c.charCodeAt(0)) >>> 0; return (h % 360) * Math.PI / 180; }
+  /** Posición de cada dispositivo: la que pusiste a mano, o estimada alrededor de su router. */
+  function devicePositions() {
+    if (!S || !plan) return [];
+    const out = [];
+    for (const d of S.devices) {
+      if (!d.mac || ['self', 'modem', 'router'].includes(d.kind)) continue;
+      const man = plan.devs && plan.devs[d.mac];
+      const cl = d.client;
+      const ap = cl && plan.pins[cl.ap];
+      const base = { mac: d.mac, name: d.name, online: d.online, trusted: d.trusted, kind: d.kind, rssi: cl ? cl.rssi : null, band: cl ? cl.band : null, apId: cl ? cl.ap : null };
+      if (man) { out.push({ ...base, x: man.x, y: man.y, floor: man.floor || 0, estimated: false }); continue; }
+      if (!ap) continue;
+      const dist = distFromRssi(cl.rssi, cl.band);
+      const noData = cl.rssi === null || cl.rssi === undefined;
+      const r = noData ? 2 : dist === null ? Math.max(plan.w, plan.h) * 0.45 : dist;
+      const f = ap.floor || 0;
+      // empieza en un ángulo fijo por aparato y busca un punto que caiga dentro de un cuarto
+      let a0 = hashAngle(d.mac), px = ap.x, py = ap.y;
+      for (let k = 0; k < 36; k++) {
+        const a = a0 + k * Math.PI / 18;
+        const x = ap.x + Math.cos(a) * r, y = ap.y + Math.sin(a) * r;
+        if (x >= 0 && y >= 0 && x <= plan.w && y <= plan.h) { px = x; py = y; if (roomAt(x, y, f)) break; }
+      }
+      out.push({ ...base, x: Math.max(0, Math.min(plan.w, px)), y: Math.max(0, Math.min(plan.h, py)), floor: f, estimated: true, ring: r, ax: ap.x, ay: ap.y, far: dist === null });
+    }
+    return out;
   }
 
   /** Busca el punto (dentro de los cuartos) donde un repetidor cableado más mejora la peor zona. */
@@ -194,6 +233,18 @@ const Plan = (() => {
       g.append(h('svg:rect', { class: 'pr-handle', 'data-handle': '1', x: (r.x + r.w) * scale - 9, y: (r.y + r.h) * scale - 9, width: 14, height: 14, rx: 3 }));
       svg.append(g);
     }
+    if (plan.showDevs !== false) {
+      for (const d of devicePositions()) {
+        if ((d.floor || 0) !== cur) continue;
+        if (d.estimated && d.mac === hover) svg.append(h('svg:circle', { class: 'dev-ring', cx: d.ax * scale, cy: d.ay * scale, r: d.ring * scale }));
+        const g = h('svg:g', { class: 'pdev' + (d.trusted ? '' : ' unk') + (d.online ? '' : ' off') + (d.estimated ? ' est' : ''), 'data-dev': d.mac, transform: `translate(${d.x * scale},${d.y * scale})` });
+        g.append(h('svg:circle', { r: 7 }));
+        g.append(h('svg:text', { y: -11, 'text-anchor': 'middle', text: (d.trusted ? '' : '? ') + d.name.slice(0, 18) }));
+        g.append(h('svg:title', { text: `${d.name}${d.rssi !== null ? ` · ${d.rssi} dBm en ${d.band} GHz` : ''}${d.estimated ? ' · posición estimada (arrástralo a donde está)' : ''}` }));
+        g.addEventListener('pointerenter', () => { if (hover !== d.mac && !drag) { hover = d.mac; render(); } });
+        svg.append(g);
+      }
+    }
     if (suggestion && (suggestion.floor || 0) === cur) {
       const sx = suggestion.x * scale, sy = suggestion.y * scale;
       svg.append(h('svg:circle', { class: 'sug-ring', cx: sx, cy: sy, r: 20 }));
@@ -246,9 +297,12 @@ const Plan = (() => {
   function bind(svg) {
     svg.addEventListener('pointerdown', (e) => {
       const pin = e.target.closest('[data-pin]');
+      const dev = e.target.closest('[data-dev]');
       const room = e.target.closest('.proom');
       const m = toMeters(svg, e);
-      if (pin) {
+      if (dev) {
+        drag = { kind: 'dev', id: dev.dataset.dev };
+      } else if (pin) {
         drag = { kind: 'pin', id: pin.dataset.pin };
       } else if (room) {
         const r = plan.rooms.find((x) => x.id === room.dataset.id);
@@ -266,6 +320,13 @@ const Plan = (() => {
         plan.pins[drag.id] = { x, y, floor: cur };
         const g = svg.querySelector(`[data-pin="${CSS.escape(drag.id)}"]`);
         if (g) { g.setAttribute('transform', `translate(${x * scale},${y * scale})`); g.classList.remove('unplaced'); }
+        drag.moved = true;
+      } else if (drag.kind === 'dev') {
+        const x = Math.max(0, Math.min(plan.w, snap(m.x))), y = Math.max(0, Math.min(plan.h, snap(m.y)));
+        plan.devs = plan.devs || {};
+        plan.devs[drag.id] = { x, y, floor: cur };
+        const g = svg.querySelector(`[data-dev="${CSS.escape(drag.id)}"]`);
+        if (g) { g.setAttribute('transform', `translate(${x * scale},${y * scale})`); g.classList.remove('est'); }
         drag.moved = true;
       } else if (drag.kind === 'move') {
         drag.r.x = Math.max(0, Math.min(plan.w - drag.r.w, snap(m.x - drag.ox)));
@@ -344,6 +405,10 @@ const Plan = (() => {
     }
     floorPanel(side);
     equipmentPanel(side);
+    const placed = Object.keys(plan.devs || {}).length;
+    side.append(h('div', { class: 'side-h', text: 'Dispositivos' }),
+      h('p', { class: 'hint', style: 'margin:0', text: 'Los puntos son tus aparatos. Si pegaste la lista de clientes del router, se colocan a la distancia que indica su señal (posición aproximada). Arrástralos a donde están de verdad. Los marcados con "?" no los has reconocido.' }));
+    if (placed) side.append(h('button', { class: 'btn ghost', type: 'button', text: `Volver a estimar posiciones (${placed} puestas a mano)`, onclick: () => { plan.devs = {}; render(); save(); } }));
     // leyenda
     const focusName = focus === 'all' ? 'todos los routers' : ((routers().find((r) => r.id === focus) || {}).name || 'router');
     side.append(h('div', { class: 'side-h', text: 'Señal estimada' }),
@@ -441,6 +506,7 @@ const Plan = (() => {
       render();
     });
     $('#heatToggle').addEventListener('change', (e) => { showHeat = e.target.checked; render(); });
+    $('#devToggle').addEventListener('change', (e) => { plan.showDevs = e.target.checked; render(); save(); if (!$('#house3d').hidden && window.House3D) window.House3D.show($('#house3d')); });
     $('#heatBand').value = band;
     $('#heatBand').addEventListener('change', (e) => { band = e.target.value; saveView(); suggestion = null; render(); if (!$('#house3d').hidden && window.House3D) window.House3D.show($('#house3d')); });
     $('#heatFocus').addEventListener('change', (e) => { focus = e.target.value; saveView(); render(); if (!$('#house3d').hidden && window.House3D) window.House3D.show($('#house3d')); });
@@ -461,6 +527,7 @@ const Plan = (() => {
     if (!S) return;
     if (!plan) plan = Object.assign(defaults(), S.settings.plan || {});
     $('#planW').value = plan.w; $('#planH').value = plan.h;
+    $('#devToggle').checked = plan.showDevs !== false;
     if (!drag) render();
     if (!$('#house3d').hidden && window.House3D && !drag) window.House3D.show($('#house3d'));
   }
@@ -479,7 +546,7 @@ const Plan = (() => {
     if (plan) normalize();
     const pins = routers().map((r) => plan.pins[r.id] && { ...plan.pins[r.id], floor: plan.pins[r.id].floor || 0, id: r.id, name: r.name, main: r.main }).filter(Boolean);
     const meas = new Map((S ? S.rooms : []).map((r) => [r.room, r]));
-    return { plan, pins, suggestion, measures: meas, floorH: FLOOR_H, roomsOf };
+    return { plan, pins, suggestion, measures: meas, floorH: FLOOR_H, roomsOf, devs: plan.showDevs !== false ? devicePositions() : [] };
   }
   /** Mapa de calor como imagen (solo dentro de los cuartos), ppm = píxeles por metro. */
   function heatCanvas(ppm = 24, f = 0) {

@@ -50,6 +50,18 @@
         <div class="tiles" id="tiles"></div>
       </div>
 
+      <div class="grid two house-row">
+        <div class="card house-card">
+          <div class="card-head"><div><h2>Tu casa</h2><p class="sub" id="houseSub">Señal estimada y dónde están tus aparatos.</p></div><button class="link" data-goto="casa">Editar →</button></div>
+          <div id="houseMini" class="house-mini"></div>
+          <div class="legend house-legend"><span><i class="bx" style="background:#3987e5;border-radius:50%"></i>Tus aparatos</span><span><i class="bx" style="background:#fab219;border-radius:50%"></i>Sin reconocer</span><span><i class="bx" style="background:rgba(12,163,12,.6)"></i>Buena señal</span><span><i class="bx" style="background:rgba(208,59,59,.6)"></i>Mala señal</span></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Quién está conectado</h2><button class="link" data-goto="equipos">Ver todos →</button></div>
+          <div id="whoBox" class="who"></div>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-head">
           <div>
@@ -124,6 +136,7 @@
           <button id="btnAddRep" class="btn">+ Repetidor</button>
           <button id="btnSuggest" class="btn">Sugerir lugar para repetidor</button>
           <label class="tog"><input type="checkbox" id="heatToggle" checked> Señal estimada</label>
+          <label class="tog"><input type="checkbox" id="devToggle" checked> Dispositivos</label>
           <select id="heatBand" aria-label="Banda"><option value="best">Mejor banda</option><option value="2.4">Solo 2.4 GHz</option><option value="5">Solo 5 GHz</option></select>
           <select id="heatFocus" aria-label="Router"></select>
         </div>
@@ -155,7 +168,10 @@
       <div class="card">
         <div class="card-head">
           <div><h2>Dispositivos en tu red</h2><p class="sub" id="devSub"></p></div>
-          <div class="seg" id="devFilter"><button data-f="all" class="on">Todos</button><button data-f="on">En línea</button><button data-f="off">Desconectados</button></div>
+          <div class="dev-actions">
+            <button id="btnClients" class="btn">Importar lista del router</button>
+            <div class="seg" id="devFilter"><button data-f="all" class="on">Todos</button><button data-f="on">En línea</button><button data-f="off">Desconectados</button><button data-f="unk">Sin reconocer</button></div>
+          </div>
         </div>
         <div id="devList" class="dev-list"></div>
         <p class="hint">Toca un dispositivo para ponerle nombre. Los celulares que duermen no responden y pueden aparecer desconectados aunque sigan en la casa.</p>
@@ -243,11 +259,32 @@
     </form>
   </dialog>
 
+  <dialog id="clientsDlg">
+    <form method="dialog" class="dlg wide-dlg">
+      <h2>Importar la lista de clientes del router</h2>
+      <p class="sub">Así la app sabe el nombre real de cada aparato, a qué router y banda está conectado y con cuánta señal (para ubicarlo en el plano).</p>
+      <ol class="side-steps">
+        <li>Abre el panel del router (pestaña Administrar → Abrir panel).</li>
+        <li>En el Arris: <b>Inalámbrico de 2.4</b> (o de 5) → <b>Lista de clientes inalámbricos</b>. En otros routers busca "Clientes", "Dispositivos conectados" o "WLAN".</li>
+        <li>Selecciona la tabla con el mouse, cópiala (Ctrl+C) y pégala aquí.</li>
+      </ol>
+      <div class="row2">
+        <label class="mini"><span>Router</span><select id="clAp"></select></label>
+        <label class="mini"><span>Banda</span><select id="clBand"><option value="2.4">2.4 GHz</option><option value="5">5 GHz</option></select></label>
+      </div>
+      <textarea id="clText" rows="8" placeholder="Pega aquí la tabla (Nombre, IP, MAC, RSSI)…"></textarea>
+      <div id="clResult" class="hint"></div>
+      <div class="dlg-actions"><button value="cancel" class="btn ghost">Cerrar</button><button value="import" class="btn primary" id="clGo">Importar</button></div>
+    </form>
+  </dialog>
+
   <dialog id="nameDlg">
     <form method="dialog" class="dlg" id="nameForm">
       <h2 id="nameTitle">Nombre</h2>
       <p class="sub" id="nameSub"></p>
       <input id="nameInput" maxlength="40" autocomplete="off">
+      <label class="tog" style="padding:4px 0"><input type="checkbox" id="trustInput"> Es mío (lo reconozco)</label>
+      <div id="nameInfo" class="hint" style="margin:0"></div>
       <div class="dlg-actions"><button value="clear" class="btn ghost">Quitar nombre</button><button value="cancel" class="btn ghost">Cancelar</button><button value="ok" class="btn primary">Guardar</button></div>
     </form>
   </dialog>

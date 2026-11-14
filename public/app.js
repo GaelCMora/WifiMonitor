@@ -102,7 +102,7 @@ function showTab(name) {
   $$('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === name));
   $$('.tab').forEach((t) => t.classList.toggle('on', t.id === 'tab-' + name));
   if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name);
-  if (name === 'resumen') requestAnimationFrame(drawLatency);
+  if (name === 'resumen') { requestAnimationFrame(drawLatency); if (S) renderHouseMini(); }
   if (name === 'casa' && window.Plan && S) requestAnimationFrame(() => window.Plan.refresh());
   window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
 }
@@ -119,7 +119,7 @@ async function load() {
 }
 
 function renderAll() {
-  renderHealth(); renderTiles(); drawLatency(); renderAdvice(); renderEvents();
+  renderHealth(); renderTiles(); drawLatency(); renderAdvice(); renderEvents(); renderWho(); renderHouseMini();
   renderSurvey(); renderCasa(); renderDevices(); renderCable(); renderLogs();
   if (window.Plan && $('#tab-casa').classList.contains('on')) window.Plan.refresh();
   if (window.Admin) window.Admin.render();
@@ -168,6 +168,43 @@ function renderTiles() {
   } else box.append(tile('Línea de cable', '—', '', 'no disponible', null, 'linea'));
   const run = (S.speedRuns || []).filter((r) => !r.error).slice(-1)[0];
   box.append(tile('Internet (PC)', run ? fmt.mbps(run.down) : '—', run ? 'Mbps' : '', run ? `↑ ${fmt.mbps(run.up)} Mbps · ${fmt.ago(run.t)}` : 'toca para medir', null, 'probar'));
+}
+
+// ------------------------------------------------------ casa en el resumen
+let miniLoading = null;
+async function renderHouseMini() {
+  const el = $('#houseMini');
+  const plan = S.settings.plan;
+  if (!plan || !plan.rooms || !plan.rooms.length) {
+    el.replaceChildren(h('div', { class: 'empty' }, 'Dibuja tu casa en la pestaña ', h('button', { class: 'link', 'data-goto': 'casa', text: 'Casa' }), ' y aquí la verás girando.'));
+    return;
+  }
+  if (!window.Plan) return;
+  if (!window.House3DMini) {
+    if (!miniLoading) miniLoading = import('/house3d.js?mini').catch((e) => { el.replaceChildren(h('div', { class: 'empty', text: 'No se pudo cargar el 3D: ' + e.message })); });
+    await miniLoading;
+  }
+  if (window.House3DMini && $('#tab-resumen').classList.contains('on')) window.House3DMini.show(el);
+}
+
+function renderWho() {
+  const devs = S.devices.filter((d) => d.online && !['self', 'modem', 'router'].includes(d.kind) && d.ip !== S.summary.net.gateway);
+  const unk = devs.filter((d) => !d.trusted && d.kind !== 'router');
+  const byAp = new Map();
+  for (const d of devs) {
+    const k = d.client ? `${apLabel(d.client.ap)} · ${d.client.band} GHz` : 'Sin dato de router';
+    if (!byAp.has(k)) byAp.set(k, []);
+    byAp.get(k).push(d);
+  }
+  const box = $('#whoBox');
+  box.replaceChildren(
+    h('div', { class: 'who-top' },
+      h('div', {}, h('b', { text: String(devs.length) }), h('span', { text: 'conectados' })),
+      h('div', { class: unk.length ? 'warn' : '' }, h('b', { text: String(unk.length) }), h('span', { text: 'sin reconocer' }))),
+    ...[...byAp.entries()].sort((a, b) => b[1].length - a[1].length).map(([k, list]) => h('div', { class: 'who-ap' },
+      h('div', { class: 'who-h', text: `${k} (${list.length})` }),
+      h('div', { class: 'who-list' }, ...list.slice(0, 12).map((d) => h('span', { class: 'who-chip' + (d.trusted ? '' : ' unk'), title: d.client && d.client.rssi !== null ? `${d.client.rssi} dBm · ${closeness(d.client.rssi)}` : d.ip, text: d.name }))))),
+    unk.length ? h('p', { class: 'hint', text: 'Toca un dispositivo en la pestaña Dispositivos y marca "Es mío" si lo reconoces.' }) : null);
 }
 
 // ------------------------------------------------------- gráfica latencia
@@ -594,7 +631,7 @@ $('#btnAddRoom').addEventListener('click', async () => {
 
 // ----------------------------------------------------------- dispositivos
 function renderDevices() {
-  const list = S.devices.filter((d) => devFilter === 'all' || (devFilter === 'on' ? d.online : !d.online));
+  const list = S.devices.filter((d) => devFilter === 'all' || (devFilter === 'on' ? d.online : devFilter === 'unk' ? !d.trusted : !d.online));
   const on = S.devices.filter((d) => d.online).length;
   $('#devSub').textContent = `${on} en línea de ${S.devices.length} vistos${S.summary.lastSweep ? ' · último barrido ' + fmt.ago(S.summary.lastSweep) : ''}`;
   $('#devList').replaceChildren(...(list.length ? list.map((d) => {
@@ -602,7 +639,10 @@ function renderDevices() {
     const since = d.online ? 'conectado ' + fmt.dur(Date.now() - (d.lastChange || d.firstSeen)) : 'fuera ' + fmt.dur(Date.now() - d.lastChange);
     return h('button', { type: 'button', class: 'dev' + (d.online ? '' : ' off'), onclick: () => rename(d) },
       h('div', { class: 'dev-ic' }, h('span', { html: ICON[d.kind] || ICON.unknown, style: 'display:grid' }), h('i', { class: 'dot ' + st })),
-      h('div', { class: 'dev-m' }, h('b', { text: d.name }), h('span', { text: [KIND_TXT[d.kind] || '', d.vendor].filter(Boolean).join(' · ') || '—' }), h('span', { class: 'mono', text: `${d.ip}${d.mac ? ' · ' + d.mac : ''}` })),
+      h('div', { class: 'dev-m' }, h('b', {}, d.trusted ? null : h('span', { class: 'unk-tag', text: '¿Es tuyo?' }), d.name),
+        h('span', { text: [KIND_TXT[d.kind] || '', d.vendor].filter(Boolean).join(' · ') || '—' }),
+        d.client ? h('span', { class: 'cl-line', text: clientLine(d.client) }) : null,
+        h('span', { class: 'mono', text: `${d.ip}${d.mac ? ' · ' + d.mac : ''}` })),
       h('div', { class: 'dev-r' }, h('b', { text: d.online ? (d.ms === null ? 'en ARP' : fmt.ms(d.ms) + ' ms') : 'desconectado' }), h('span', { text: since }), d.drops ? h('div', { text: `${d.drops} caída${d.drops === 1 ? '' : 's'}` }) : null));
   }) : [h('div', { class: 'empty', text: S.summary.lastSweep ? 'Nada con este filtro.' : 'Buscando dispositivos (tarda ~1 min)…' })]));
 }
@@ -611,21 +651,55 @@ $('#devFilter').addEventListener('click', (e) => {
   $$('#devFilter button').forEach((x) => x.classList.toggle('on', x === b)); devFilter = b.dataset.f; renderDevices();
 });
 
+function apLabel(ip) { const r = S.devices.find((x) => x.ip === ip); return r ? r.name : ip; }
+function closeness(rssi) {
+  if (rssi === null || rssi === undefined) return '';
+  if (rssi <= -95) return 'sin dato de señal';
+  if (rssi >= -50) return 'muy cerca';
+  if (rssi >= -65) return 'a una pared o cuarto';
+  if (rssi >= -80) return 'lejos';
+  return 'en el límite (¿afuera?)';
+}
+function clientLine(c) {
+  return `${apLabel(c.ap)} · ${c.band} GHz${c.rssi !== null && c.rssi !== undefined ? ` · ${c.rssi} dBm · ${closeness(c.rssi)}` : ''}`;
+}
+
 function rename(d) {
   const dlg = $('#nameDlg');
   $('#nameTitle').textContent = 'Nombre para este dispositivo';
   $('#nameSub').textContent = `${d.ip}${d.mac ? ' · ' + d.mac : ''}${d.vendor ? ' · ' + d.vendor : ''}`;
   $('#nameInput').value = d.alias || d.name;
+  $('#trustInput').checked = !!d.trusted;
+  $('#trustInput').disabled = !d.mac;
+  $('#nameInfo').textContent = d.client ? 'Conectado a ' + clientLine(d.client) : 'Pega la lista de clientes del router para ver a qué router está conectado y con cuánta señal.';
   dlg.returnValue = '';
   dlg.onclose = async () => {
     const key = d.mac || d.ip;
-    if (dlg.returnValue === 'ok') await post('/api/alias', { key, name: $('#nameInput').value.trim() });
-    else if (dlg.returnValue === 'clear') await post('/api/alias', { key, name: '' });
+    if (dlg.returnValue === 'ok') {
+      await post('/api/alias', { key, name: $('#nameInput').value.trim() });
+      if (d.mac) await post('/api/trust', { mac: d.mac, trusted: $('#trustInput').checked });
+    } else if (dlg.returnValue === 'clear') await post('/api/alias', { key, name: '' });
     else return;
     await load();
   };
   dlg.showModal(); $('#nameInput').select();
 }
+$('#btnClients').addEventListener('click', () => {
+  const gw = S.summary.net.gateway;
+  const routers = S.devices.filter((d) => d.kind === 'modem' || d.kind === 'router' || d.ip === gw);
+  if (gw && !routers.find((r) => r.ip === gw)) routers.unshift({ ip: gw, name: 'Módem principal' });
+  $('#clAp').replaceChildren(...routers.map((r) => h('option', { value: r.ip, text: `${r.name} (${r.ip})` })));
+  $('#clResult').textContent = '';
+  $('#clientsDlg').showModal();
+});
+$('#clGo').addEventListener('click', async (e) => {
+  e.preventDefault();
+  const r = await post('/api/clients', { ap: $('#clAp').value, band: $('#clBand').value, text: $('#clText').value });
+  if (!r.count) { $('#clResult').textContent = 'No encontré aparatos en el texto. Copia la tabla completa (con las columnas de IP y MAC).'; return; }
+  $('#clResult').textContent = `Listo: ${r.count} aparatos — ` + r.found.map((f) => `${f.name || f.mac} (${f.rssi ?? '?'} dBm)`).join(', ') + '. Puedes pegar otra lista (la de 5 GHz o la del otro router).';
+  $('#clText').value = '';
+  await load();
+});
 $('#nameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('#nameDlg').close('ok'); } });
 
 // ------------------------------------------------------------------ línea

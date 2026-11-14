@@ -9,6 +9,8 @@ import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 
 const SLAB = 0.15;                 // grosor de losa
+// El mismo archivo se carga dos veces: normal (pestaña Casa) y con ?mini (casa girando en el Resumen).
+const MINI = new URL(import.meta.url).searchParams.has('mini');
 let renderer, scene, camera, controls, root, modelRoot, waves = [], pinMeshes = [], built = false, host;
 let lastData = null;
 const opt = {
@@ -17,8 +19,9 @@ const opt = {
   view: 'all',                     // 'all' | índice de piso
   explode: 0,                      // metros extra entre pisos para separarlos
 };
-try { Object.assign(opt, JSON.parse(localStorage.getItem('wm-3d') || '{}')); } catch { /* */ }
-const saveOpt = () => { try { localStorage.setItem('wm-3d', JSON.stringify(opt)); } catch { /* */ } };
+if (MINI) opt.autoRotate = true;
+else try { Object.assign(opt, JSON.parse(localStorage.getItem('wm-3d') || '{}')); } catch { /* */ }
+const saveOpt = () => { if (MINI) return; try { localStorage.setItem('wm-3d', JSON.stringify(opt)); } catch { /* */ } };
 
 let modelObj = null;               // modelo importado (ya cargado)
 let modelKey = '';                 // para no recargarlo si no cambió
@@ -65,7 +68,8 @@ function init(el) {
   controls.enableDamping = true;
   controls.maxPolarAngle = Math.PI * 0.49;
   controls.minDistance = 2; controls.maxDistance = 120;
-  controls.autoRotate = opt.autoRotate; controls.autoRotateSpeed = 0.6;
+  controls.autoRotate = opt.autoRotate; controls.autoRotateSpeed = MINI ? 1.2 : 0.6;
+  if (MINI) { controls.enableZoom = false; controls.enablePan = false; }
   controls.addEventListener('start', () => { if (controls.autoRotate) { controls.autoRotate = false; opt.autoRotate = false; saveOpt(); syncBar(); } });
   scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.7));
   const sun = new THREE.DirectionalLight(0xffffff, 1.5);
@@ -75,7 +79,12 @@ function init(el) {
   modelRoot = new THREE.Group(); scene.add(modelRoot);
   new ResizeObserver(resize).observe(canvasWrap);
   resize();
-  bindDrag();
+  if (!MINI) bindDrag();
+  else {
+    // en el Resumen: si lo giras con el dedo sigue girando solo después de 3 s; doble clic abre la pestaña Casa
+    let t; controls.addEventListener('end', () => { clearTimeout(t); t = setTimeout(() => { controls.autoRotate = true; }, 3000); });
+    renderer.domElement.addEventListener('dblclick', () => { if (window.showTab) window.showTab('casa'); });
+  }
   const loop = () => {
     requestAnimationFrame(loop);
     if (!host.offsetParent) return;
@@ -175,7 +184,7 @@ function build(data) {
           root.add(wall(a, b, c, d, wallMat, base, hgt));
         }
       }
-      if (f === top) {
+      if (f === top && !MINI) {
         const m = measures.get(r.name);
         const sub = m && m.down !== null ? `${m.down >= 100 ? Math.round(m.down) : m.down.toFixed(1)} Mbps medidos` : null;
         const label = textSprite(r.name, sub, '#f0efec', false, 0.8);
@@ -213,12 +222,29 @@ function build(data) {
         }
       }
     }
-    const lbl = textSprite(p.name, p.main ? 'da el internet' : 'repetidor', p.main ? '#9cc4f5' : '#7fe0b9', true, 0.7);
+    const lbl = textSprite(p.name, MINI ? null : (p.main ? 'da el internet' : 'repetidor'), p.main ? '#9cc4f5' : '#7fe0b9', true, MINI ? 0.6 : 0.7);
     lbl.position.y = 1.7; grp.add(lbl);
     root.add(grp);
   }
 
-  if (suggestion && visible(suggestion.floor || 0)) {
+  // dispositivos (celulares, TV…): punto azul si es tuyo, amarillo si no lo has reconocido
+  for (const d of data.devs || []) {
+    if (!visible(d.floor || 0)) continue;
+    const base = floorBase(plan, d.floor || 0);
+    const col = d.trusted ? 0x3987e5 : 0xfab219;
+    const dot = new THREE.Mesh(new THREE.SphereGeometry(0.16, 20, 12), new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.35, transparent: !d.online, opacity: d.online ? 1 : 0.4 }));
+    dot.position.set(d.x, base + 0.9, d.y); dot.castShadow = true;
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.9, 6), new THREE.MeshBasicMaterial({ color: 0x898781, transparent: true, opacity: 0.6 }));
+    stem.position.set(d.x, base + 0.45, d.y);
+    root.add(dot, stem);
+    if (!MINI) {
+      const l = textSprite((d.trusted ? '' : '? ') + d.name.slice(0, 22), d.rssi !== null && d.rssi !== undefined ? `${d.rssi} dBm · ${d.band} GHz` : null, d.trusted ? '#cde2fb' : '#fab219', true, 0.5);
+      l.position.set(d.x, base + 1.3, d.y);
+      root.add(l);
+    }
+  }
+
+  if (suggestion && visible(suggestion.floor || 0) && !MINI) {
     const base = floorBase(plan, suggestion.floor || 0);
     const ring = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.05, 12, 48), new THREE.MeshBasicMaterial({ color: 0xfab219 }));
     ring.rotation.x = Math.PI / 2; ring.position.set(suggestion.x, base + 0.06, suggestion.y);
@@ -471,10 +497,11 @@ async function upload(file) {
 
 function refresh() { const d = window.Plan.data(); build(d); syncBar(); }
 
-window.House3D = {
+const API = {
   show(el) {
     if (!renderer) {
-      el.replaceChildren(...bar());
+      if (!MINI) el.replaceChildren(...bar());
+      else el.replaceChildren();
       init(el);
     }
     const d = window.Plan.data();
@@ -491,4 +518,5 @@ window.House3D = {
     return { x: r.left + (v.x + 1) / 2 * r.width, y: r.top + (1 - v.y) / 2 * r.height };
   },
 };
+if (MINI) window.House3DMini = API; else window.House3D = API;
 window.dispatchEvent(new Event('house3d-ready'));

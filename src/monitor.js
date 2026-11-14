@@ -37,6 +37,8 @@ class Monitor extends EventEmitter {
       places: {},          // ip -> cuarto donde está físicamente (módem, repetidor…)
       aliases: {},         // mac (o ip) -> nombre
       checklist: {},       // id -> true
+      clients: {},         // mac -> { name, ip, rssi, ap, band, t }  (lista de clientes del router)
+      trusted: {},         // mac -> true  (dispositivos marcados como "es mío")
       tickSec: 3,
       sweepSec: 60,
     }, store.load('settings', {}));
@@ -275,7 +277,10 @@ class Monitor extends EventEmitter {
       Object.assign(d, { ip, mac, vendor, kind: guessKind(vendor, ip, this.net.gateway), lastSeen: t, ms: ms === null ? null : round(ms), misses: 0 });
       if (ip === this.net.localIp) d.kind = 'self';
       if (!d.online && !isNew) this.event(0, `${this.deviceName(d)} volvió a conectarse (fuera ${human(Math.round((t - d.lastChange) / 1000))})`, 'device');
-      if (isNew && !first) this.event(0, `Dispositivo nuevo en la red: ${this.deviceName(d)}${vendor ? ' · ' + vendor : ''}`, 'device');
+      if (isNew && !first) {
+        const trusted = mac && this.settings.trusted[mac];
+        this.event(trusted ? 0 : 1, `${trusted ? 'Se conectó' : 'Dispositivo NUEVO en tu red'}: ${this.deviceName(d)}${vendor ? ' · ' + vendor : ''} (${ip})`, 'device');
+      }
       if (!d.online) d.lastChange = t;
       d.online = true;
       d.history = (d.history || []).concat([[t, 1]]).slice(-200);
@@ -323,10 +328,60 @@ class Monitor extends EventEmitter {
     if (a) return a;
     if (d.kind === 'self') return 'Esta PC';
     if (d.ip === this.net.gateway) return 'Módem principal';
+    const cl = d.mac && this.settings.clients[d.mac];
+    if (cl && cl.name && !/^unknown$/i.test(cl.name)) return cl.name.replace(/-/g, ' ');
     if (d.host) return d.host;
     const v = d.vendor && !/privada|desconocido/i.test(d.vendor) ? d.vendor : '';
     if (d.kind === 'router') return 'Repetidor ' + (v || d.ip.split('.').pop());
     return (v ? v + ' ' : 'Dispositivo ') + d.ip.split('.').pop();
+  }
+
+  // ------------------------------------ lista de clientes pegada del router
+  /**
+   * Lee el texto copiado de la página "Lista de clientes" de un router (cualquier marca):
+   * busca en cada renglón una MAC, una IP y un número negativo (RSSI).
+   */
+  importClients(text, ap, band) {
+    const t = Date.now();
+    const found = [];
+    const lines = String(text || '').split(/\r?\n/);
+    let pendingName = '';
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const mac = (line.match(/\b([0-9a-f]{2}([:-])[0-9a-f]{2}(?:\2[0-9a-f]{2}){4})\b/i) || [])[1];
+      if (!mac) { if (line.trim() && !/nombre|name|ip|mac|rssi/i.test(line)) pendingName = line.trim(); continue; }
+      const ip = (line.match(/\b(\d{1,3}(?:\.\d{1,3}){3})\b/) || [])[1] || '';
+      const after = line.slice(line.toLowerCase().indexOf(mac.toLowerCase()) + mac.length);
+      const rssiM = after.match(/(-\d{2,3})/);
+      const cut = ip ? line.indexOf(ip) : line.toLowerCase().indexOf(mac.toLowerCase());
+      let name = line.slice(0, cut).replace(/[0-9a-f]{1,4}(:[0-9a-f]{0,4}){2,7}/gi, '').trim().split(/\t/)[0].trim();
+      if (!name || name === ip || name.toLowerCase() === mac.toLowerCase()) name = pendingName;
+      // nombres partidos en dos renglones ("Tab-S6-Lite-de-Yud" + "ith")
+      const next = (lines[i + 1] || '').trim();
+      if (next && !/[0-9a-f]{2}[:-][0-9a-f]{2}/i.test(next) && next.length <= 12 && !/\s/.test(next) && !/^(ss|et|net|less)$/i.test(next)) { name += next; i++; }
+      pendingName = '';
+      // Los "Ethernet" que lista un router suelen ser aparatos vistos a través del cable del otro módem: no se importan.
+      if (/ethernet|cableado|wired|\blan\b/i.test(line + (lines[i + 1] || '').trim())) continue;
+      if (/^static-|^dhcp-/i.test(name)) name = '';
+      const key = mac.toLowerCase().replace(/-/g, ':');
+      const prev = found.find((f) => f.mac === key);
+      const entry = { mac: key, name: name.slice(0, 40), ip: ip.includes('.') ? ip : (prev && prev.ip) || '', rssi: rssiM ? parseInt(rssiM[1], 10) : null };
+      if (prev) { if (!prev.ip && entry.ip) prev.ip = entry.ip; continue; }
+      found.push(entry);
+    }
+    for (const f of found) {
+      const cur = this.settings.clients[f.mac] || {};
+      this.settings.clients[f.mac] = { name: f.name || cur.name || '', ip: f.ip || cur.ip || '', rssi: f.rssi, ap: String(ap || '').slice(0, 40), band: band === '5' ? '5' : '2.4', t };
+    }
+    this.saveSettings();
+    if (found.length) this.event(0, `Lista de clientes importada (${found.length} aparatos en ${this.apName(ap)} ${band === '5' ? '5' : '2.4'} GHz)`, 'clients');
+    this.emit('devices');
+    return found;
+  }
+
+  apName(ip) {
+    const d = [...this.devices.values()].find((x) => x.ip === ip);
+    return d ? this.deviceName(d) : ip;
   }
 
   // --------------------------------------------- pruebas desde el celular

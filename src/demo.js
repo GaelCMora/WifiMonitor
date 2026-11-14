@@ -73,6 +73,14 @@ function load(mon) {
   }
   mon.settings.aliases = { 'f4:f5:d8:44:55:66': 'Chromecast sala', '48:46:fb:11:22:33': 'Telmex (repetidor)', 'a6:12:9f:00:11:22': 'Celular de Gael', '8c:79:f5:21:43:65': 'TV Samsung cuarto' };
   mon.lastSweep = t0 - 20000; mon.sweptOnce = true;
+  mon.settings.clients = {
+    'a6:12:9f:00:11:22': { name: 'Galaxy-S25-Ultra', ip: '192.168.0.11', rssi: -58, ap: '192.168.0.1', band: '2.4', t: t0 },
+    '8c:79:f5:21:43:65': { name: 'TV-Samsung', ip: '192.168.0.14', rssi: -47, ap: '192.168.0.1', band: '5', t: t0 },
+    'f4:f5:d8:44:55:66': { name: 'Chromecast', ip: '192.168.0.8', rssi: -71, ap: '192.168.0.1', band: '5', t: t0 },
+    '24:6f:28:aa:00:01': { name: 'unknown', ip: '192.168.0.21', rssi: -62, ap: '192.168.0.2', band: '2.4', t: t0 },
+    '7c:bb:8a:10:20:30': { name: 'Switch', ip: '192.168.0.23', rssi: -55, ap: '192.168.0.2', band: '5', t: t0 },
+  };
+  mon.settings.trusted = { 'a6:12:9f:00:11:22': true, '8c:79:f5:21:43:65': true, 'f4:f5:d8:44:55:66': true, '7c:bb:8a:10:20:30': true };
 
   const sv = [
     ['Cuarto', 'IZZI-E972-5G', 98, 18, 4, 2], ['Cuarto', 'IZZI-E972', 28, 9, 7, 6],

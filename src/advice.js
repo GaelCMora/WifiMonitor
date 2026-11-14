@@ -154,6 +154,16 @@ function advice(m) {
     }
   }
 
+  // ------------------------------------------ dispositivos sin reconocer
+  const unknown = [...m.devices.values()].filter((d) => d.online && d.mac && !m.settings.trusted[d.mac] && !['self', 'modem'].includes(d.kind) && d.ip !== s.net.gateway);
+  if (unknown.length) {
+    add(unknown.length > 3 ? 'warning' : 'tip', 'untrusted', `${unknown.length} dispositivo${unknown.length === 1 ? '' : 's'} sin marcar como tuyo${unknown.length === 1 ? '' : 's'}`,
+      unknown.slice(0, 8).map((d) => `${m.deviceName(d)} (${d.ip})`).join(', ') + (unknown.length > 8 ? '…' : '') + '.',
+      ['En Dispositivos toca cada uno y marca "Es mío" si lo reconoces. Así la app te avisa cuando se conecte uno nuevo.',
+        'Para ver su nombre real, pega la lista de clientes de tu router (botón "Importar lista del router").',
+        'Si uno no es tuyo: bloquéalo por MAC en el router (Inalámbrico → Control de direcciones MAC) y cambia la contraseña del WiFi; apaga WPS.']);
+  }
+
   // ----------------------------------------------- dispositivos
   const flaky = [...m.devices.values()].filter((d) => (d.drops || 0) >= 3 && d.kind !== 'phone');
   if (flaky.length) {

@@ -4,6 +4,16 @@ Panel web para vigilar la red de tu casa: módem, internet, DNS, la línea de ca
 
 ![Node 18+](https://img.shields.io/badge/node-%3E%3D18-3987e5) ![Windows · Linux · macOS](https://img.shields.io/badge/Windows%20%C2%B7%20Linux%20%C2%B7%20macOS-1a1a19)
 
+| Resumen | Casa en 3D |
+|---|---|
+| ![Resumen](docs/resumen.png) | ![Casa en 3D](docs/casa-3d.png) |
+| **Plano con señal estimada y dispositivos** | **Dispositivos** |
+| ![Plano](docs/plano.png) | ![Dispositivos](docs/dispositivos.png) |
+| **Línea de cable** | **En el celular** |
+| ![Línea](docs/linea.png) | <img src="docs/celular.png" width="260"> <img src="docs/celular-probar.png" width="260"> |
+
+*Capturas en modo demostración (`wifimonitor on --demo`).*
+
 ## Instalar
 
 Necesitas [Node.js 18 o más nuevo](https://nodejs.org) y [Git](https://git-scm.com).
@@ -61,7 +71,7 @@ Opciones de `wifimonitor on`:
   - Sugiere el mejor lugar para poner un repetidor.
   - **Vista 3D** con Three.js.
   - Diagrama de cómo está conectada la red y ranking de señal por cuarto.
-- **Dispositivos:** quién está conectado, de qué fabricante es, su latencia, y cuándo y cuántas veces se desconecta. Puedes ponerle nombre a cada uno.
+- **Dispositivos:** quién está conectado, de qué fabricante es, su latencia, y cuándo y cuántas veces se desconecta. Puedes ponerle nombre, marcar cuáles son tuyos (te avisa si se conecta uno desconocido) e importar la lista de clientes del router para ver su nombre real, a qué router y banda están conectados y con cuánta señal; con eso se ubican aproximadamente en el plano.
 - **Línea:** para internet por cable (Izzi, Megacable…), lee la potencia, la SNR y los errores del módem (`192.168.100.1`) y te dice si están en rango.
 - **Administrar:** accesos a los paneles de tus routers y guía de dónde está cada opción en tu modelo. Herramientas: ping, traceroute, comparar DNS, limpiar caché DNS y Wake-on-LAN.
 - **Mejoras:** recomendaciones calculadas con lo que se midió, por ejemplo:
