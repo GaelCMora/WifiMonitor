@@ -12,6 +12,7 @@ const { Monitor } = require('./monitor');
 const { advice } = require('./advice');
 const sys = require('./sys');
 const tools = require('./tools');
+const firewall = require('./firewall');
 const THREE_DIR = (() => { try { return path.dirname(path.dirname(require.resolve('three'))); } catch { return null; } })();
 
 const args = process.argv.slice(2);
@@ -24,6 +25,7 @@ const dataOpt = opt('data', undefined);
 const store = new Store(typeof dataOpt === 'string' ? dataOpt
   : DEMO ? path.join(require('os').tmpdir(), 'wifimonitor-demo') : undefined);
 const mon = new Monitor(store, { demo: DEMO });
+mon.port = PORT;
 const PUBLIC = path.join(__dirname, '..', 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' };
 
@@ -81,7 +83,8 @@ function history(minutes) {
 
 function fullState(req) {
   return {
-    now: Date.now(), demo: DEMO, port: PORT, urls: lanUrls(), you: clientIp(req),
+    now: Date.now(), demo: DEMO, port: PORT, urls: lanUrls(), you: clientIp(req), local: isLoopback(clientIp(req)),
+    firewall: mon.firewall || null, lanSeen: mon.lanSeen || null,
     summary: mon.summary(), health: mon.health(), devices: deviceList(), rooms: mon.rooms(),
     survey: mon.survey.slice(-60), advice: advice(mon), events: mon.events.slice(-150).reverse(),
     settings: { rooms: mon.settings.rooms, places: mon.settings.places, checklist: mon.settings.checklist, internetHost: mon.settings.internetHost, plan: mon.settings.plan || null },
@@ -169,9 +172,21 @@ let internetBusy = null;
 
 // ------------------------------------------------------------- rutas
 
+const isLoopback = (ip) => ip === '127.0.0.1' || ip === '::1' || ip === '';
+async function checkFirewall() {
+  if (DEMO || HOST === '127.0.0.1') return;
+  try {
+    const was = mon.firewall;
+    mon.firewall = Object.assign(await firewall.check(PORT), { t: Date.now() });
+    if (mon.firewall.applies && !mon.firewall.ok && (!was || was.ok)) mon.event(1, 'Los celulares no podrán abrir el panel: ' + mon.firewall.reason, 'firewall');
+  } catch { /* */ }
+}
+
 async function handle(req, res) {
   const url = new URL(req.url, 'http://x');
   const p = url.pathname;
+  const cip = clientIp(req);
+  if (!isLoopback(cip)) mon.lanSeen = { ip: cip, t: Date.now() };
   try {
     if (p === '/api/state') return send(res, 200, fullState(req));
     if (p === '/api/history') return send(res, 200, history(Math.min(1440, parseInt(url.searchParams.get('min') || '60', 10))));
@@ -290,6 +305,14 @@ async function handle(req, res) {
       res.writeHead(200, { 'Content-Type': MIME[path.extname(fp)] || 'application/octet-stream', 'Cache-Control': 'max-age=86400' });
       return fs.createReadStream(fp).pipe(res);
     }
+    if (p === '/api/fix-firewall' && req.method === 'POST') {
+      // Solo desde la propia PC: abre la ventana de permiso de administrador ahí.
+      if (!isLoopback(cip)) return send(res, 403, { error: 'Hazlo desde la PC donde corre WiFi Monitor.' });
+      const r = await firewall.fix(PORT);
+      mon.firewall = Object.assign(r.check || mon.firewall || {}, { t: Date.now() });
+      if (r.ok) mon.event(0, 'Firewall configurado: ya se puede abrir el panel desde el celular', 'firewall');
+      return send(res, 200, r);
+    }
     if (p === '/api/logs') return send(res, 200, store.logFiles());
     if (p.startsWith('/api/logs/')) {
       const f = store.logPath(decodeURIComponent(p.slice(10)));
@@ -297,7 +320,7 @@ async function handle(req, res) {
       res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Content-Disposition': `attachment; filename="${path.basename(f)}"` });
       return fs.createReadStream(f).pipe(res);
     }
-    if (p === '/api/health') return send(res, 200, { ok: true, pid: process.pid, port: PORT });
+    if (p === '/api/health') return send(res, 200, { ok: true, pid: process.pid, port: PORT, firewall: mon.firewall || null });
 
     // Archivos estáticos
     let fp = path.join(PUBLIC, p === '/' ? 'index.html' : path.normalize(p).replace(/^([/\\])+/, ''));
@@ -320,6 +343,7 @@ server.on('error', (e) => {
 (async () => {
   if (DEMO) require('./demo').load(mon);
   else await mon.start();
+  checkFirewall(); setInterval(checkFirewall, 5 * 60000);
   server.listen(PORT, HOST, () => {
     console.log(`WiFi Monitor listo en http://localhost:${PORT}`);
     for (const u of lanUrls()) console.log(`  En tu red (${u.name}): ${u.url}`);

@@ -10,6 +10,19 @@ function advice(m) {
   const gw = s.net.gateway || '192.168.0.1';
   const dnsAvg = s.dns && s.dns.avg;
 
+  // ------------------------------------------------ acceso desde el celular
+  const fw = m.firewall;
+  const lanRecent = m.lanSeen && Date.now() - m.lanSeen.t < 15 * 60000;
+  if (fw && fw.applies && !fw.ok && !lanRecent) {
+    const o = add('serious', 'firewall', 'Los celulares no pueden abrir el panel',
+      fw.reason + ' Por eso en el celular la página se queda en blanco cargando.',
+      ['Toca "Arreglar ahora" en esta PC: Windows te pedirá permiso de administrador y se crea la regla "WiFi Monitor".',
+        'O en una terminal: wifimonitor firewall',
+        'O a mano en cmd como administrador:',
+        `netsh advfirewall firewall add rule name="WiFi Monitor" dir=in action=allow protocol=TCP localport=${m.port || 7777} profile=any`]);
+    o.action = 'fix-firewall';
+  }
+
   // ---------------------------------------------------------------- DNS
   if (s.dns && (s.dns.systemHijack || s.dns.modemHijack)) {
     add('critical', 'dns-hijack', 'El DNS está dando direcciones falsas',

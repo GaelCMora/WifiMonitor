@@ -303,7 +303,7 @@ let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(dra
 // ----------------------------------------------------------- recomendaciones
 function advCard(a, compact) {
   const steps = (a.steps || []).map((s) => {
-    const isCmd = /^(netsh|ipconfig|ping|nslookup|tracert)\b/i.test(s);
+    const isCmd = /^(netsh|ipconfig|ping|nslookup|tracert|wifimonitor)\b/i.test(s);
     if (!isCmd) return h('li', { text: s });
     return h('li', { class: 'cmd' }, h('div', { class: 'cmd-box' }, h('code', { text: s }),
       h('button', { type: 'button', text: 'Copiar', onclick: (e) => { navigator.clipboard?.writeText(s); e.target.textContent = 'Copiado'; setTimeout(() => { e.target.textContent = 'Copiar'; }, 1500); } })));
@@ -312,7 +312,23 @@ function advCard(a, compact) {
     h('div', { class: 'adv-h' },
       h('div', { class: 'adv-ic ' + a.level, html: ICON[a.level] || ICON.tip }),
       h('div', {}, h('div', { class: 'adv-lvl', text: LEVEL_TXT[a.level] }), h('div', { class: 'adv-t', text: a.title }), h('div', { class: 'adv-why', text: a.why || '' }))),
-    !compact && steps.length ? h('ol', {}, steps) : null);
+    !compact && steps.length ? h('ol', {}, steps) : null,
+    a.action === 'fix-firewall' ? fixButton() : null);
+}
+
+function fixButton() {
+  if (!S.local) return h('p', { class: 'hint', text: 'Para arreglarlo, abre este panel en la PC (http://localhost:' + S.port + ') y toca "Arreglar ahora".' });
+  const b = h('button', { class: 'btn primary', type: 'button', text: 'Arreglar ahora', style: 'margin-top:10px' });
+  b.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    b.disabled = true; b.textContent = 'Acepta el permiso de Windows…';
+    try {
+      const r = await post('/api/fix-firewall', {});
+      b.textContent = r.ok ? 'Listo ✓ — recarga en el celular' : (r.error || 'No quedó; revisa los pasos');
+    } catch (err) { b.textContent = 'Error: ' + err.message; }
+    setTimeout(load, 1500);
+  });
+  return b;
 }
 
 function renderAdvice() {

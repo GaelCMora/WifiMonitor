@@ -76,9 +76,7 @@ async function on() {
     if (await health()) {
       process.stdout.write('\r');
       await printInfo();
-      if (process.platform === 'win32') {
-        console.log(c.d('  Si Windows pregunta por el Firewall, marca "Redes privadas" y Permitir: así abre desde el celular.\n'));
-      }
+      if (process.platform === 'win32' && !flag('local')) await firewallHint();
       if (!flag('no-open')) openBrowser(`http://localhost:${PORT}`);
       return;
     }
@@ -87,6 +85,24 @@ async function on() {
   console.log('\n' + c.r('  No arrancó. Revisa el registro: ') + LOGFILE);
   try { console.log(fs.readFileSync(LOGFILE, 'utf8').split('\n').slice(-15).join('\n')); } catch { /* */ }
   process.exit(1);
+}
+
+async function firewallHint() {
+  const fw = require('../src/firewall');
+  const r = await fw.check(PORT);
+  if (r.applies && !r.ok) {
+    console.log(c.r('  ⚠ ') + 'Los celulares no van a poder abrirlo: ' + r.reason);
+    console.log('    Arréglalo con: ' + c.c('wifimonitor firewall') + c.d('  (pide permiso de administrador)\n'));
+  }
+}
+
+async function fixFirewall() {
+  if (process.platform !== 'win32') { console.log('  Esto solo aplica en Windows.'); return; }
+  const fw = require('../src/firewall');
+  console.log('  Pidiendo permiso de administrador (acepta la ventana de Windows)…');
+  const r = await fw.fix(PORT);
+  if (r.ok) console.log('  ' + c.g('✓') + ` Listo. Regla "${fw.RULE}" creada para el puerto ${PORT}. Recarga la página en el celular.`);
+  else console.log('  ' + c.r('✗') + ' ' + (r.error || (r.check && r.check.reason) || 'No se pudo configurar.'));
 }
 
 async function off() {
@@ -115,6 +131,7 @@ function help() {
   ${c.c('wifimonitor status')}      Muestra si está encendido y sus direcciones
   ${c.c('wifimonitor open')}        Abre el panel en el navegador
   ${c.c('wifimonitor logs')}        Abre la carpeta con los registros (CSV)
+  ${c.c('wifimonitor firewall')}    Permite abrirlo desde el celular (Windows, pide admin)
 
   Opciones de "on":
     --port 7777     puerto (por defecto 7777)
@@ -130,6 +147,7 @@ function help() {
     case 'on': case 'start': return on();
     case 'off': case 'stop': return off();
     case 'status': return status();
+    case 'firewall': return fixFirewall();
     case 'open': return openBrowser(`http://localhost:${PORT}`);
     case 'logs': {
       const dir = path.join(HOME, 'logs'); fs.mkdirSync(dir, { recursive: true });
