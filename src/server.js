@@ -240,12 +240,39 @@ async function handle(req, res) {
         rooms: (pl.rooms || []).slice(0, 60).map((r) => ({ id: String(r.id).slice(0, 12), name: String(r.name || 'Cuarto').slice(0, 40), x: num(r.x, 0), y: num(r.y, 0), w: num(r.w, 3), h: num(r.h, 3), floor: Math.max(0, Math.min(5, parseInt(r.floor, 10) || 0)) })),
         pins: Object.fromEntries(Object.entries(pl.pins || {}).slice(0, 30).map(([k, v]) => [String(k).slice(0, 40), { x: num(v.x, 0), y: num(v.y, 0), floor: Math.max(0, Math.min(5, parseInt(v.floor, 10) || 0)) }])),
         extra: (pl.extra || []).slice(0, 10).map((e) => ({ id: String(e.id).slice(0, 40), name: String(e.name || 'Repetidor').slice(0, 40) })),
+        wallH: Math.max(2, Math.min(5, num(pl.wallH, 2.5))),
+        model: pl.model && ['glb', 'gltf', 'stl', 'obj'].includes(pl.model.ext) ? {
+          ext: pl.model.ext, name: String(pl.model.name || '').slice(0, 60), v: Number.isFinite(+pl.model.v) ? +pl.model.v : 0,
+          scale: Number.isFinite(+pl.model.scale) && +pl.model.scale > 0 ? +(+pl.model.scale).toPrecision(6) : 1, rotY: num(pl.model.rotY, 0), dx: num(pl.model.dx, 0), dy: num(pl.model.dy, 0), dz: num(pl.model.dz, 0),
+          opacity: Math.max(0.05, Math.min(1, num(pl.model.opacity, 0.6))), zUp: !!pl.model.zUp, hideWalls: pl.model.hideWalls !== false,
+        } : null,
       };
       mon.settings.plan = plan;
       for (const r of plan.rooms) if (!mon.settings.rooms.includes(r.name)) mon.settings.rooms.push(r.name);
       for (const [ip, room] of Object.entries(b.places || {})) mon.settings.places[String(ip).slice(0, 40)] = String(room).slice(0, 40);
       mon.saveSettings();
       return send(res, 200, { ok: true });
+    }
+    if (p === '/api/model') {
+      const files = fs.readdirSync(store.dir).filter((f) => f.startsWith('model.'));
+      if (req.method === 'POST') {
+        const ext = String(url.searchParams.get('ext') || '').toLowerCase();
+        if (!['glb', 'gltf', 'stl', 'obj'].includes(ext)) return send(res, 400, { error: 'formato' });
+        for (const f of files) fs.unlinkSync(path.join(store.dir, f));
+        const dest = path.join(store.dir, 'model.' + ext);
+        const out = fs.createWriteStream(dest);
+        let size = 0, aborted = false;
+        req.on('data', (c) => { size += c.length; if (size > 150e6 && !aborted) { aborted = true; out.destroy(); req.destroy(); fs.rm(dest, () => {}); } });
+        req.pipe(out);
+        out.on('finish', () => { if (!aborted) send(res, 200, { ok: true, size }); });
+        out.on('error', () => send(res, 500, { error: 'no se pudo guardar' }));
+        return;
+      }
+      if (req.method === 'DELETE') { for (const f of files) fs.unlinkSync(path.join(store.dir, f)); return send(res, 200, { ok: true }); }
+      if (!files.length) return send(res, 404, { error: 'sin modelo' });
+      const f = path.join(store.dir, files[0]);
+      res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': fs.statSync(f).size, 'Cache-Control': 'no-cache' });
+      return fs.createReadStream(f).pipe(res);
     }
     if (p.startsWith('/api/tools/') && req.method === 'POST') {
       const b = await readBody(req);

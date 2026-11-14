@@ -385,8 +385,22 @@ dialog::backdrop { background: rgba(0, 0, 0, .55); backdrop-filter: blur(3px); }
 .sug-ring { fill: none; stroke: var(--warning); stroke-width: 3; stroke-dasharray: 5 4; animation: spin 6s linear infinite; transform-box: fill-box; transform-origin: center; }
 .sug-txt { fill: var(--warning); font-size: 12px; font-weight: 700; paint-order: stroke; stroke: var(--surface-2); stroke-width: 3px; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.house3d { height: 520px; border-radius: 10px; overflow: hidden; background: radial-gradient(ellipse at 50% 30%, #23262b, #0d0d0d); touch-action: none; }
-:root[data-theme="light"] .house3d { background: radial-gradient(ellipse at 50% 30%, #eef1f5, #cfd4da); }
+.house3d { display: flex; flex-direction: column; gap: 10px; }
+.h3d-canvas { height: 560px; border-radius: 10px; overflow: hidden; background: radial-gradient(ellipse at 50% 30%, #23262b, #0d0d0d); touch-action: none; }
+:root[data-theme="light"] .h3d-canvas { background: radial-gradient(ellipse at 50% 30%, #eef1f5, #cfd4da); }
+.h3d-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.h3d-range { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.h3d-range input, .h3d-mrow input[type=range] { width: 110px; accent-color: var(--accent); padding: 0; border: 0; background: none; }
+.h3d-status { font-size: 13px; color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+.h3d-model { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: var(--surface-2); display: flex; flex-direction: column; gap: 10px; }
+.h3d-mh { font-size: 13.5px; color: var(--ink-2); } .h3d-mh b { color: var(--ink); }
+.h3d-mrow { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.h3d-mrow .mini input[type=number] { width: 92px; }
+.h3d-hint { margin: 0; }
+.equip { display: grid; grid-template-columns: 10px 1fr auto; gap: 8px; align-items: center; font-size: 13px; }
+.equip select { padding: 5px 8px; font-size: 12.5px; }
+.eq-dot { width: 10px; height: 10px; border-radius: 50%; background: #1baf7a; } .eq-dot.main { background: var(--accent); }
+.eq-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .plan-side { display: flex; flex-direction: column; gap: 8px; font-size: 13.5px; }
 .side-h { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
 .side-steps { margin: 0; padding-left: 18px; color: var(--ink-2); }
@@ -414,9 +428,11 @@ dialog::backdrop { background: rgba(0, 0, 0, .55); backdrop-filter: blur(3px); }
 .tool-row { display: flex; gap: 8px; margin-top: 10px; }
 .tool-row input, .tool-row select { flex: 1; min-width: 0; }
 .tool-out { margin: 14px 0 0; background: var(--page); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; font-size: 12.5px; line-height: 1.5; overflow-x: auto; white-space: pre; max-height: 360px; color: var(--ink); }
-@media (max-width: 900px) { .plan-layout { grid-template-columns: 1fr; } .house3d { height: 420px; } }
-@media (max-width: 640px) { .admin-grid, .tools { grid-template-columns: 1fr; } .guide { grid-template-columns: 1fr; gap: 2px; } .guide dd { margin-bottom: 6px; } .house3d { height: 360px; } }
+@media (max-width: 900px) { .plan-layout { grid-template-columns: 1fr; } .h3d-canvas { height: 440px; } }
+@media (max-width: 640px) { .admin-grid, .tools { grid-template-columns: 1fr; } .guide { grid-template-columns: 1fr; gap: 2px; } .guide dd { margin-bottom: 6px; } .h3d-canvas { height: 380px; } }
 
 .pr-ghost { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 4 4; opacity: .6; pointer-events: none; }
 #floorSeg button.add { color: var(--accent); }
 .guide { grid-template-columns: minmax(120px, 34%) 1fr; }
+
+.plan-layout.wide { grid-template-columns: 1fr; }

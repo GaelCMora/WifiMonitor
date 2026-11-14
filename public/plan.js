@@ -50,7 +50,7 @@ const Plan = (() => {
         const p = plan.pins[r.id];
         if (!p || r.extra) continue;
         const room = roomAt(p.x, p.y, p.floor || 0);
-        if (room) places[r.id] = room.name + (plan.floors.length > 1 ? ` (${plan.floors[room.floor || 0]})` : '');
+        if (room) places[r.id] = room.name;
       }
       await post('/api/plan', { plan, places });
       if (!$('#house3d').hidden && window.House3D) window.House3D.show($('#house3d'));
@@ -296,6 +296,7 @@ const Plan = (() => {
           h('li', { text: 'Los colores muestran la señal estimada. Las pruebas del celular aparecen en cada cuarto.' })));
     }
     floorPanel(side);
+    equipmentPanel(side);
     // leyenda
     side.append(h('div', { class: 'side-h', text: 'Señal estimada' }),
       h('div', { class: 'heat-legend' }, ...LEVELS.map((l) => h('span', {}, h('i', { style: `background:rgba(${l.c.join(',')},.55)` }), l.name))));
@@ -319,6 +320,28 @@ const Plan = (() => {
     // copia el contorno del piso de abajo como punto de partida
     for (const r of roomsOf(cur - 1)) plan.rooms.push({ id: uid(), name: r.name + ' (arriba)', x: r.x, y: r.y, w: r.w, h: r.h, floor: cur });
     render(); save();
+  }
+  function equipmentPanel(side) {
+    const list = routers();
+    if (!list.length) return;
+    side.append(h('div', { class: 'side-h', text: 'Módem y repetidores' }));
+    for (const r of list) {
+      const p = plan.pins[r.id];
+      const sel = h('select', { 'aria-label': 'Piso de ' + r.name },
+        h('option', { value: '', text: p ? 'Quitar del plano' : 'Sin colocar' }),
+        ...plan.floors.map((f, i) => h('option', { value: String(i), text: f, selected: p && (p.floor || 0) === i ? true : null })));
+      if (!p) sel.value = '';
+      sel.addEventListener('change', () => {
+        if (sel.value === '') { delete plan.pins[r.id]; if (r.extra) plan.extra = plan.extra.filter((e) => e.id !== r.id); }
+        else {
+          const f = +sel.value;
+          plan.pins[r.id] = Object.assign({ x: plan.w / 2, y: plan.h / 2 }, p, { floor: f });
+          cur = f;
+        }
+        suggestion = null; render(); save();
+      });
+      side.append(h('div', { class: 'equip' }, h('span', { class: 'eq-dot' + (r.main ? ' main' : '') }), h('span', { class: 'eq-n', text: r.name }), sel));
+    }
   }
   function floorPanel(side) {
     if (plan.floors.length < 2 && cur === 0) return;
@@ -374,11 +397,11 @@ const Plan = (() => {
       const b = e.target.closest('button'); if (!b) return;
       $$('#planView button').forEach((x) => x.classList.toggle('on', x === b));
       const three = b.dataset.v === '3d';
-      $('#plan').hidden = three; $('#house3d').hidden = !three; $('#btnRotate').hidden = !three;
+      $('#plan').hidden = three; $('#house3d').hidden = !three;
+      $('#planSide').hidden = three; $('.plan-layout').classList.toggle('wide', three);
       if (three) await show3d();
       else render();
     });
-    $('#btnRotate').addEventListener('click', () => { if (window.House3D) $('#btnRotate').textContent = 'Girar: ' + (window.House3D.toggleRotate() ? 'sí' : 'no'); });
     let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if ($('#tab-casa').classList.contains('on')) render(); }, 150); });
   }
   function refresh() {
@@ -422,7 +445,16 @@ const Plan = (() => {
     }
     return c;
   }
-  return { init, refresh, render, data, heatCanvas, levels: LEVELS };
+  function setPin(id, x, y, floor) {
+    plan.pins[id] = { x, y, floor: floor || 0 };
+    suggestion = null;
+    render(); save();
+  }
+  function saveModel(model) {
+    plan.model = model;
+    save();
+  }
+  return { init, refresh, render, data, heatCanvas, setPin, saveModel, setSize, levels: LEVELS };
 })();
 window.Plan = Plan;
 Plan.init();

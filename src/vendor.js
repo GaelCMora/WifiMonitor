@@ -39,6 +39,16 @@ function isRandomMac(mac) {
   return Number.isFinite(b) && (b & 0x02) === 0x02;
 }
 
+/** "HUAWEI TECHNOLOGIES CO.,LTD" → "Huawei", "Arris Group, Inc." → "Arris". */
+function cleanVendor(v) {
+  if (!v) return v;
+  let s = String(v).replace(/[,.]?\s*(technologies|technology|co\.?,?\s*ltd\.?|ltd\.?|inc\.?|corporation|corp\.?|limited|gmbh|s\.?a\.?|llc|group|electronics|communications?|international|mobile|telecom|device|devices)\b\.?/gi, ' ')
+    .replace(/[,.]+$/g, '').replace(/\s+/g, ' ').trim();
+  if (!s) s = String(v).trim();
+  if (s === s.toUpperCase() && s.length > 3) s = s.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+  return s.slice(0, 30);
+}
+
 class VendorLookup {
   constructor(store) {
     this.store = store;
@@ -52,7 +62,7 @@ class VendorLookup {
     if (isRandomMac(mac)) return 'MAC privada (celular/tablet)';
     const p = mac.slice(0, 8);
     if (OUI[p]) return OUI[p];
-    if (this.cache[p] !== undefined) return this.cache[p];
+    if (this.cache[p] !== undefined) return cleanVendor(this.cache[p]);
     if (!this.queue.includes(p)) this.queue.push(p);
     this.pump();
     return '';
@@ -94,4 +104,4 @@ function guessKind(vendor, ip, gateway) {
   return 'unknown';
 }
 
-module.exports = { VendorLookup, guessKind, isRandomMac };
+module.exports = { VendorLookup, guessKind, isRandomMac, cleanVendor };

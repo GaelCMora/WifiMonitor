@@ -325,6 +325,7 @@ class Monitor extends EventEmitter {
     if (d.ip === this.net.gateway) return 'Módem principal';
     if (d.host) return d.host;
     const v = d.vendor && !/privada|desconocido/i.test(d.vendor) ? d.vendor : '';
+    if (d.kind === 'router') return 'Repetidor ' + (v || d.ip.split('.').pop());
     return (v ? v + ' ' : 'Dispositivo ') + d.ip.split('.').pop();
   }
 
