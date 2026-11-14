@@ -137,9 +137,31 @@ function renderHealth() {
   const why = $('#healthWhy'); why.replaceChildren();
   if (!hl.why.length) why.append(h('li', { class: 'ok', text: 'Todo responde bien en este momento' }));
   hl.why.slice(0, 4).forEach((w) => why.append(h('li', { text: w })));
+  renderScorePop(hl);
   const n = S.summary.net;
   $('#heroNet').textContent = `Módem ${n.gateway || '?'} · esta PC ${n.localIp || '?'} · monitoreando ${fmt.dur(Date.now() - S.summary.startedAt)}`;
 }
+
+/** Desglose de la calificación: de 100 se restan puntos por cada cosa que está mal. */
+function renderScorePop(hl) {
+  const pop = $('#scorePop'); if (!pop) return;
+  const parts = hl.parts || [];
+  const bad = parts.filter((p) => p.lost);
+  const ok = parts.filter((p) => !p.lost);
+  pop.replaceChildren(
+    h('p', { class: 'sp-t', text: bad.length ? `Empieza en 100 y se restan ${100 - hl.score} puntos:` : 'Empieza en 100 y no se resta nada.' }),
+    h('ul', { class: 'sp-list' },
+      h('li', { class: 'sp-start' }, h('span', { text: 'Punto de partida' }), h('b', { text: '100' })),
+      ...bad.map((p) => { const [t, d] = p.text.split(/:\s(.+)/); return h('li', { class: 'sp-bad' }, h('span', {}, h('em', { text: t }), d ? h('small', { text: d[0].toUpperCase() + d.slice(1) }) : null), h('b', { text: '−' + p.lost })); }),
+      h('li', { class: 'sp-total' }, h('span', { text: 'Calificación' }), h('b', { text: String(hl.score) }))),
+    ok.length ? h('p', { class: 'sp-ok-t', text: 'Sin descuento:' }) : null,
+    ok.length ? h('ul', { class: 'sp-ok' }, ...ok.map((p) => h('li', {}, h('span', { text: p.area }), h('small', { text: p.text })))) : null,
+    h('p', { class: 'sp-foot', text: 'Se calcula con los últimos minutos de mediciones y se actualiza solo.' }));
+}
+// en el celular no hay "pasar el cursor": tocar el círculo lo abre y cierra
+$('#ring')?.addEventListener('click', (e) => { e.stopPropagation(); $('.ring-wrap').classList.toggle('open'); });
+document.addEventListener('click', () => $('.ring-wrap')?.classList.remove('open'));
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('.ring-wrap')?.classList.remove('open'); });
 
 function tile(k, v, unit, d, level, goto) {
   return h('div', { class: 'tile', 'data-goto': goto || null },

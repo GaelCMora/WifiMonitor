@@ -537,27 +537,32 @@ class Monitor extends EventEmitter {
   /** Calificación 0–100 de la salud de la red con los motivos. */
   health() {
     const s = this.summary();
-    let score = 100;
     const why = [];
-    const pen = (p, msg) => { score -= p; why.push(msg); };
-    if (s.flags.gwDown) pen(60, 'El módem no responde');
-    else if (s.gwLoss > 0) pen(Math.min(30, s.gwLoss), `Pérdida al módem ${s.gwLoss}%`);
-    if (s.flags.netDown) pen(50, 'Sin internet');
-    else if (s.netLoss > 0) pen(Math.min(25, s.netLoss), `Pérdida a internet ${s.netLoss}%`);
-    if (s.gwAvg > 20) pen(Math.min(15, (s.gwAvg - 20) / 4), `Módem lento (${s.gwAvg} ms)`);
-    if (s.netAvg > 60) pen(Math.min(15, (s.netAvg - 60) / 6), `Internet lento (${s.netAvg} ms)`);
+    // Cada revisión que entra en la calificación, con los puntos que quita (0 = bien).
+    const parts = [];
+    const check = (area, max, lost, msg, okMsg) => {
+      lost = Math.round(Math.min(max, Math.max(0, lost)));
+      parts.push({ area, max, lost, text: lost ? msg : okMsg });
+      if (lost) why.push(msg);
+    };
+    if (s.flags.gwDown) check('Módem', 60, 60, 'El módem no responde', '');
+    else check('Módem', 30, s.gwLoss || 0, `Pérdida al módem ${s.gwLoss}%: se pierden ${s.gwLoss} de cada 100 pings (−1 punto por cada 1%)`, 'Responde sin pérdidas');
+    if (s.flags.netDown) check('Internet', 50, 50, 'Sin internet', '');
+    else check('Internet', 25, s.netLoss || 0, `Pérdida a internet ${s.netLoss}%: se pierden ${s.netLoss} de cada 100 pings a internet (−1 punto por cada 1%)`, 'Sin pérdidas a internet');
+    check('Velocidad del módem', 15, s.gwAvg > 20 ? (s.gwAvg - 20) / 4 : 0, `Módem lento: ${s.gwAvg} ms; lo normal es menos de 20 ms`, `${s.gwAvg ?? '—'} ms, menos de 20 ms`);
+    check('Velocidad a internet', 15, s.netAvg > 60 ? (s.netAvg - 60) / 6 : 0, `Internet lento: ${s.netAvg} ms; lo normal es menos de 60 ms`, `${s.netAvg ?? '—'} ms, menos de 60 ms`);
     if (s.dns) {
-      if (s.dns.systemHijack) pen(25, 'DNS de esta PC devuelve direcciones falsas');
-      else if (s.dns.fails.sistema) pen(20, 'DNS de esta PC no responde');
-      else if (s.dns.avg.sistema > 150) pen(10, `DNS lento (${Math.round(s.dns.avg.sistema)} ms)`);
+      if (s.dns.systemHijack) check('DNS', 25, 25, 'El DNS de esta PC devuelve direcciones falsas', '');
+      else if (s.dns.fails.sistema) check('DNS', 20, 20, 'El DNS de esta PC no responde', '');
+      else check('DNS', 10, s.dns.avg.sistema > 150 ? 10 : 0, `DNS lento (${Math.round(s.dns.avg.sistema)} ms)`, 'Responde bien y con direcciones reales');
     }
     if (s.cable && s.cable.available) {
-      if (s.cable.verdict === 'bad') pen(20, 'Línea de cable fuera de rango');
-      else if (s.cable.verdict === 'warn') pen(8, 'Línea de cable al límite');
+      if (s.cable.verdict === 'bad') check('Línea de cable', 20, 20, 'Línea de cable fuera de rango (señal del proveedor)', '');
+      else check('Línea de cable', 8, s.cable.verdict === 'warn' ? 8 : 0, 'Línea de cable al límite: un nivel de la señal que llega del proveedor está cerca de salirse del rango (detalle en la pestaña Línea)', 'Niveles dentro del rango ideal');
     }
-    score = Math.max(0, Math.round(score));
+    const score = Math.max(0, 100 - parts.reduce((t, p) => t + p.lost, 0));
     const label = score >= 90 ? 'Excelente' : score >= 75 ? 'Buena' : score >= 50 ? 'Con problemas' : 'Mala';
-    return { score, label, why };
+    return { score, label, why: why.map((w) => w.split(':')[0]), parts };
   }
 }
 
