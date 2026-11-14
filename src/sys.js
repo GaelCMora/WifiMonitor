@@ -138,14 +138,21 @@ async function wifiScan() {
   const out = await run('netsh', ['wlan', 'show', 'networks', 'mode=bssid']);
   const nets = [];
   let ssid = '';
+  let auth = '';
   let cur = null;
   for (const line of out.split(/\r?\n/)) {
     let m;
-    if ((m = line.match(/^SSID \d+\s*:\s*(.*)$/i))) { ssid = m[1].trim() || '(oculta)'; continue; }
-    if ((m = line.match(/^\s*BSSID \d+\s*:\s*(\S+)/i))) { cur = { ssid, bssid: m[1], signal: null, channel: null }; nets.push(cur); continue; }
+    if ((m = line.match(/^SSID \d+\s*:\s*(.*)$/i))) { ssid = m[1].trim() || '(oculta)'; auth = ''; cur = null; continue; }
+    if ((m = line.match(/^\s*(?:Autenticaci.n|Authentication)\s*:\s*(.+)$/i))) { auth = m[1].trim(); continue; }
+    if ((m = line.match(/^\s*BSSID \d+\s*:\s*(\S+)/i))) { cur = { ssid, bssid: m[1].toLowerCase(), auth, signal: null, channel: null, band: null }; nets.push(cur); continue; }
     if (!cur) continue;
     if ((m = line.match(/^\s*(?:Señal|Se.al|Signal)\s*:\s*(\d+)/i))) cur.signal = +m[1];
     else if ((m = line.match(/^\s*(?:Canal|Channel)\s*:\s*(\d+)/i))) cur.channel = +m[1];
+    else if ((m = line.match(/^\s*(?:Banda|Band)\s*:\s*([\d.,]+)/i))) cur.band = parseFloat(m[1].replace(',', '.'));
+  }
+  for (const n of nets) {
+    if (!n.band && n.channel) n.band = n.channel <= 14 ? 2.4 : n.channel >= 191 ? 6 : 5;
+    n.rssi = Number.isFinite(n.signal) ? Math.round(n.signal / 2 - 100) : null;
   }
   return nets;
 }

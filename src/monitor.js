@@ -230,10 +230,40 @@ class Monitor extends EventEmitter {
   async checkWifi() {
     if (this.opts.demo) return;
     this.wifi = await sys.wifiInfo();
-    if (this.wifi && (!this.lastScan || now() - this.lastScan > 120000)) {
-      this.lastScan = now();
-      this.wifiNeighbors = await sys.wifiScan();
+    // Aunque la PC esté por cable, si tiene tarjeta WiFi puede ver las redes de alrededor.
+    if (sys.IS_WIN && (!this.lastScan || now() - this.lastScan > 120000)) await this.scanWifi();
+  }
+
+  /** Busca las redes WiFi de alrededor y marca cuáles salen de tus módems. */
+  async scanWifi() {
+    if (this.opts.demo) return this.wifiNeighbors;
+    this.lastScan = now();
+    const nets = await sys.wifiScan();
+    this.wifiNeighbors = nets.map((n) => ({ ...n, own: this.ownAp(n.bssid) }));
+    return this.wifiNeighbors;
+  }
+
+  /**
+   * ¿Esta BSSID sale de uno de tus módems/repetidores? Los routers anuncian sus redes
+   * con una MAC muy parecida a la de su puerto LAN (mismo fabricante, final cercano).
+   */
+  ownAp(bssid) {
+    if (!bssid) return null;
+    const parse = (mac) => mac.toLowerCase().split(/[:-]/).map((x) => parseInt(x, 16));
+    const b = parse(bssid);
+    if (b.length !== 6 || b.some(Number.isNaN)) return null;
+    const tail = (a) => (a[3] << 16) | (a[4] << 8) | a[5];
+    for (const d of this.devices.values()) {
+      if (d.kind !== 'modem' && d.kind !== 'router') continue;
+      const a = parse(d.mac);
+      if (a.length !== 6) continue;
+      // el bit "administrado localmente" del primer byte a veces cambia entre LAN y WiFi
+      const sameOui = (a[0] | 2) === (b[0] | 2) && a[1] === b[1] && a[2] === b[2];
+      const near = Math.abs(tail(a) - tail(b)) <= 24;
+      const sameTail = a[2] === b[2] && a[3] === b[3] && a[4] === b[4] && Math.abs(a[5] - b[5]) <= 24;
+      if ((sameOui && near) || sameTail) return { ip: d.ip, name: this.deviceName(d) };
     }
+    return null;
   }
 
   // ----------------------------------------------- dispositivos (cada 60 s)

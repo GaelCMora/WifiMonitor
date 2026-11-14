@@ -420,9 +420,78 @@ function renderLogs() {
 }
 
 // ------------------------------------------------------ prueba de señal
+let showOtherNets = false;
+let scanningNets = false;
+let netsErr = '';
+
+/** Agrupa lo que vio la PC por nombre de red: una entrada por SSID con sus bandas. */
+function groupNets() {
+  const used = new Set(S.survey.map((s) => s.network).filter(Boolean));
+  const by = new Map();
+  for (const n of S.wifiNeighbors || []) {
+    if (!n.ssid || n.ssid === '(oculta)') continue;
+    const g = by.get(n.ssid) || { ssid: n.ssid, signal: -1, bands: new Set(), own: null, open: false, aps: 0 };
+    g.aps++;
+    if ((n.signal ?? -1) > g.signal) { g.signal = n.signal ?? -1; g.channel = n.channel; }
+    if (n.band) g.bands.add(n.band);
+    if (n.own && !g.own) g.own = n.own;
+    if (/abierta|open/i.test(n.auth || '')) g.open = true;
+    by.set(n.ssid, g);
+  }
+  // redes que ya usaste en una prueba, aunque la PC no las vea ahora
+  for (const ssid of used) if (!by.has(ssid)) by.set(ssid, { ssid, signal: -1, bands: new Set(), own: null, aps: 0, past: true });
+  const all = [...by.values()].map((g) => ({ ...g, mine: !!g.own || used.has(g.ssid) }));
+  all.sort((a, b) => (b.mine - a.mine) || (b.signal - a.signal));
+  return all;
+}
+
+function netBars(signal) {
+  const lv = signal < 0 ? 0 : signal >= 75 ? 4 : signal >= 50 ? 3 : signal >= 30 ? 2 : 1;
+  return h('span', { class: 'bars l' + lv, 'aria-hidden': 'true' }, h('i'), h('i'), h('i'), h('i'));
+}
+
+function renderNetChips() {
+  const box = $('#netChips'); if (!box) return;
+  const all = groupNets();
+  const cur = $('#network').value.trim();
+  const mine = all.filter((g) => g.mine);
+  const others = all.filter((g) => !g.mine);
+  const item = (g) => {
+    const bands = [...g.bands].sort().map((b) => (b === 2.4 ? '2.4' : String(b)) + ' GHz').join(' + ');
+    const meta = [g.own ? 'de ' + g.own.name : g.past ? 'la usaste antes' : '', bands, g.signal >= 0 ? g.signal + '%' : ''].filter(Boolean).join(' · ');
+    return h('button', { type: 'button', class: 'net' + (g.ssid === cur ? ' on' : '') + (g.mine ? ' mine' : ''), title: g.channel ? 'Canal ' + g.channel : '',
+      onclick: () => { $('#network').value = g.ssid; try { localStorage.setItem('wm-net', g.ssid); } catch { /* */ } renderNetChips(); } },
+      netBars(g.signal), h('span', { class: 'nm' }, h('b', { text: g.ssid }), h('small', { text: meta || 'sin datos de señal' })), g.open ? h('span', { class: 'tag warn', text: 'abierta' }) : null);
+  };
+  const scanAt = S.wifiScanAt ? 'Vistas por la PC ' + fmt.ago(S.wifiScanAt) : 'La PC aún no ha buscado redes';
+  const head = h('div', { class: 'nets-head' },
+    h('span', { text: all.length ? (mine.length ? 'Tus redes' : 'Redes cerca') : 'No hay redes detectadas' }),
+    h('button', { type: 'button', class: 'linkbtn', disabled: scanningNets, text: scanningNets ? 'Buscando…' : 'Buscar redes', onclick: scanNets }));
+  const kids = [head];
+  const list = mine.length ? mine : others;
+  kids.push(...list.map(item));
+  if (mine.length && others.length) {
+    kids.push(h('button', { type: 'button', class: 'linkbtn more', text: showOtherNets ? 'Ocultar redes de vecinos' : `Ver redes de vecinos (${others.length})`, onclick: () => { showOtherNets = !showOtherNets; renderNetChips(); } }));
+    if (showOtherNets) kids.push(...others.map(item));
+  }
+  if (netsErr) kids.push(h('p', { class: 'nets-note err', text: netsErr }));
+  if (!all.length) kids.push(h('p', { class: 'nets-note', text: 'La PC busca redes con su tarjeta WiFi. Si está solo por cable y no tiene tarjeta WiFi, escribe el nombre de la red que sale en tu celular.' }));
+  else kids.push(h('p', { class: 'nets-note', text: scanAt + '. Elige la misma red a la que está conectado tu celular.' }));
+  box.replaceChildren(...kids.filter(Boolean));
+}
+
+async function scanNets() {
+  scanningNets = true; netsErr = ''; renderNetChips();
+  try {
+    const r = await post('/api/wifi-scan', {});
+    S.wifiNeighbors = r.nets; S.wifiScanAt = r.t;
+  } catch (e) { netsErr = e.message; }
+  scanningNets = false; renderNetChips();
+}
 function renderSurvey() {
   const rooms = [...new Set([...S.settings.rooms, ...S.survey.map((s) => s.room)])];
-  const nets = [...new Set(S.survey.map((s) => s.network).filter(Boolean))];
+  const nets = [...new Set([...S.survey.map((s) => s.network).filter(Boolean), ...(S.wifiNeighbors || []).map((n) => n.ssid)])];
+  renderNetChips();
   $('#roomList').replaceChildren(...rooms.map((r) => h('option', { value: r })));
   $('#netList').replaceChildren(...nets.map((r) => h('option', { value: r })));
   const cur = $('#room').value;
@@ -441,7 +510,7 @@ function renderSurvey() {
 }
 try { $('#room').value = localStorage.getItem('wm-room') || ''; $('#network').value = localStorage.getItem('wm-net') || ''; } catch { /* */ }
 $('#room').addEventListener('input', () => { try { localStorage.setItem('wm-room', $('#room').value); } catch { /* */ } renderSurvey(); });
-$('#network').addEventListener('input', () => { try { localStorage.setItem('wm-net', $('#network').value); } catch { /* */ } });
+$('#network').addEventListener('input', () => { try { localStorage.setItem('wm-net', $('#network').value); } catch { /* */ } renderNetChips(); });
 
 function gauge(v, max, unit, phase) {
   const frac = Math.max(0, Math.min(1, Math.log10(1 + v) / Math.log10(1 + max)));

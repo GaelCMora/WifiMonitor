@@ -87,6 +87,19 @@ function load(mon) {
     ['Sala', 'IZZI-E972', 47, 11, 9, 8], ['Sala', 'Telmex 5G', 112, 24, 3, 1],
     ['Cocina', 'IZZI-E972', 14, 4, 24, 31], ['Patio', 'IZZI-E972', 6, 1.5, 41, 48],
   ];
+  mon.wifiNeighbors = [
+    ['IZZI-E972-5G', 'ec:a9:40:82:1f:8a', 'WPA2-Personal', 92, 149, 5, true],
+    ['IZZI-E972', 'ec:a9:40:82:1f:89', 'WPA2-Personal', 96, 11, 2.4, true],
+    ['Telmex 5G', '48:46:fb:11:22:35', 'WPA2-Personal', 70, 44, 5, true],
+    ['Telmex', '48:46:fb:11:22:34', 'WPA2-Personal', 78, 1, 2.4, true],
+    ['TOTALPLAY-8F21', '9c:d6:43:01:02:03', 'WPA2-Personal', 41, 6, 2.4, false],
+    ['INFINITUM4C5A', 'a4:b1:c1:11:22:33', 'WPA2-Personal', 33, 11, 2.4, false],
+    ['DIRECT-7B-HP LaserJet', 'fa:28:19:aa:bb:cc', 'WPA2-Personal', 22, 6, 2.4, false],
+  ].map(([ssid, bssid, auth, signal, channel, band, own]) => ({
+    ssid, bssid, auth, signal, channel, band, rssi: Math.round(signal / 2 - 100),
+    own: own ? (bssid.startsWith('ec') ? { ip: '192.168.0.1', name: 'Módem' } : { ip: '192.168.0.2', name: 'Telmex (repetidor)' }) : null,
+  }));
+  mon.lastScan = t0 - 40000;
   mon.survey = sv.map(([room, network, down, up, ping, jitter], i) => ({ id: 'd' + i, t: t0 - (10 - i) * 600000, room, network, device: 'Android', down, up, ping, jitter, loss: 0 }));
   mon.speedRuns = [{ t: t0 - 3600e3, down: 140.2, up: 21.6, ping: 9 }];
   mon.events = [];

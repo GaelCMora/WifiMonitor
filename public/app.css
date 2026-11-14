@@ -577,3 +577,25 @@ h2 { font-size: 16.5px; }
 .r-v.txt { font-family: var(--sans); font-weight: 600; letter-spacing: -.01em; }
 .pdev.est circle { stroke-dasharray: none; stroke-width: 2px; stroke: color-mix(in srgb, var(--surface) 60%, transparent); }
 @media (max-width: 640px) { #btnTour span { display: none; } #btnTour { padding: 8px; } .demo { display: none; } }
+
+/* ---- redes WiFi detectadas (prueba de señal) ---- */
+.nets { display: grid; gap: 6px; margin: -2px 0 14px; }
+.nets-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; color: var(--ink-2); font-weight: 600; }
+.linkbtn { background: none; border: 0; padding: 2px 0; color: var(--accent); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.linkbtn:hover { text-decoration: underline; }
+.linkbtn:disabled { color: var(--ink-3, var(--ink-2)); cursor: default; text-decoration: none; }
+.linkbtn.more { justify-self: start; }
+.net { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line-2); background: transparent; color: var(--ink); cursor: pointer; font: inherit; }
+.net:hover { background: var(--surface-2); }
+.net:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.net.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.net .nm { display: grid; min-width: 0; flex: 1; }
+.net .nm b { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.net .nm small { color: var(--ink-2); font-size: 12px; }
+.net .tag.warn { background: color-mix(in srgb, var(--warning) 18%, transparent); color: var(--warning); }
+.bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 16px; flex: none; }
+.bars i { width: 4px; border-radius: 1px; background: var(--line-2); }
+.bars i:nth-child(1) { height: 25%; } .bars i:nth-child(2) { height: 50%; } .bars i:nth-child(3) { height: 75%; } .bars i:nth-child(4) { height: 100%; }
+.bars.l1 i:nth-child(-n+1), .bars.l2 i:nth-child(-n+2), .bars.l3 i:nth-child(-n+3), .bars.l4 i:nth-child(-n+4) { background: var(--accent); }
+.nets-note { margin: 2px 0 0; font-size: 12px; color: var(--ink-2); }
+.nets-note.err { color: var(--serious); }

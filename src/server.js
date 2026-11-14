@@ -91,7 +91,7 @@ function fullState(req) {
     survey: mon.survey.slice(-60), advice: advice(mon), events: mon.events.slice(-150).reverse(),
     settings: { rooms: mon.settings.rooms, places: mon.settings.places, checklist: mon.settings.checklist, internetHost: mon.settings.internetHost, plan: mon.settings.plan || null },
     cableHistory: mon.cableHistory.slice(-240), speedRuns: mon.speedRuns.slice(-20),
-    wifiNeighbors: mon.wifiNeighbors, logs: store.logFiles().slice(0, 40),
+    wifiNeighbors: mon.wifiNeighbors.map((n) => ({ ...n, own: n.own || mon.ownAp(n.bssid) })), wifiScanAt: mon.lastScan || null, logs: store.logFiles().slice(0, 40),
   };
 }
 
@@ -274,6 +274,10 @@ async function handle(req, res) {
       if (b.done) mon.settings.checklist[b.id] = true; else delete mon.settings.checklist[b.id];
       mon.saveSettings();
       return send(res, 200, { ok: true });
+    }
+    if (p === '/api/wifi-scan' && req.method === 'POST') {
+      if (!mon.lastScan || Date.now() - mon.lastScan > 8000) await mon.scanWifi();
+      return send(res, 200, { ok: true, nets: mon.wifiNeighbors.map((n) => ({ ...n, own: n.own || mon.ownAp(n.bssid) })), t: mon.lastScan || Date.now() });
     }
     if (p === '/api/internet-test' && req.method === 'POST') {
       if (DEMO) return send(res, 200, { t: Date.now(), down: 141.3, up: 21.8, ping: 9 });
