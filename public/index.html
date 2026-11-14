@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d0d0d">
+  <title>WiFi Monitor</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19.5a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2zM7.6 14.9l1.5 1.5a4.1 4.1 0 0 1 5.8 0l1.5-1.5a6.2 6.2 0 0 0-8.8 0zM4.6 11.9l1.5 1.5a8.3 8.3 0 0 1 11.8 0l1.5-1.5a10.4 10.4 0 0 0-14.8 0zM1.6 8.9l1.5 1.5a12.5 12.5 0 0 1 17.8 0l1.5-1.5a14.6 14.6 0 0 0-20.8 0z"/></svg>
+      <span>WiFi Monitor</span>
+      <span id="live" class="live" title="Conexión con el monitor"><i></i><b>En vivo</b></span>
+      <span id="demoTag" class="demo" hidden>DEMO</span>
+    </div>
+    <div class="top-actions">
+      <button id="btnQr" class="btn ghost"><svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM5 5v3h3V5zM14 3h7v7h-7zM16 5v3h3V5zM3 14h7v7H3zM5 16v3h3v-3zM14 14h3v3h-3zM18 18h3v3h-3zM18 14h3v2h-3zM14 18h2v3h-2z"/></svg><span>Abrir en el celular</span></button>
+      <button id="btnTheme" class="btn icon ghost" title="Cambiar tema" aria-label="Cambiar tema"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg></button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs" role="tablist">
+    <button data-tab="resumen" class="on">Resumen</button>
+    <button data-tab="probar">Probar señal</button>
+    <button data-tab="casa">Casa</button>
+    <button data-tab="equipos">Dispositivos</button>
+    <button data-tab="linea">Línea</button>
+    <button data-tab="admin">Administrar</button>
+    <button data-tab="mejoras">Mejoras <em id="advCount"></em></button>
+    <button data-tab="eventos">Eventos</button>
+  </nav>
+
+  <main id="main">
+    <!-- RESUMEN -->
+    <section id="tab-resumen" class="tab on">
+      <div class="grid hero-grid">
+        <div class="card hero">
+          <div class="ring" id="ring"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="ring-bg"/><circle cx="60" cy="60" r="52" class="ring-fg" id="ringFg"/></svg><div class="ring-txt"><b id="score">—</b><span>de 100</span></div></div>
+          <div class="hero-txt">
+            <div class="eyebrow">Salud de la red</div>
+            <h1 id="healthLabel">Midiendo…</h1>
+            <ul id="healthWhy" class="why"></ul>
+            <div class="hero-net" id="heroNet"></div>
+          </div>
+        </div>
+        <div class="tiles" id="tiles"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <h2>Latencia</h2>
+            <p class="sub">Cuánto tarda en responder el módem y un servidor de internet. Las franjas rojas son cortes.</p>
+          </div>
+          <div class="seg" id="range">
+            <button data-min="15">15 min</button><button data-min="60" class="on">1 h</button><button data-min="360">6 h</button><button data-min="1440">24 h</button>
+          </div>
+        </div>
+        <div class="legend"><span><i class="ln s1"></i>Módem</span><span><i class="ln s2"></i>Internet</span><span><i class="bx out"></i>Sin respuesta</span></div>
+        <div class="chart" id="latChart"></div>
+      </div>
+
+      <div class="grid two">
+        <div class="card">
+          <div class="card-head"><h2>Qué mejorar</h2><button class="link" data-goto="mejoras">Ver todo →</button></div>
+          <div id="advTop" class="adv-list compact"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Últimos eventos</h2><button class="link" data-goto="eventos">Ver todo →</button></div>
+          <ul id="evTop" class="events compact"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- PROBAR -->
+    <section id="tab-probar" class="tab">
+      <div class="grid two">
+        <div class="card test-card">
+          <h2>Prueba la señal donde estás</h2>
+          <p class="sub">Abre esta página en el celular y camina por la casa. En cada cuarto toca <b>Probar aquí</b>: se mide la WiFi entre tu celular y el módem.</p>
+          <label class="fld"><span>¿En qué cuarto estás?</span><input id="room" list="roomList" placeholder="Ej. Sala" autocomplete="off" maxlength="40"></label>
+          <div class="chips" id="roomChips"></div>
+          <label class="fld"><span>¿A qué red WiFi estás conectado?</span><input id="network" list="netList" placeholder="Ej. IZZI-E972-5G" autocomplete="off" maxlength="40"></label>
+          <datalist id="roomList"></datalist><datalist id="netList"></datalist>
+          <div class="gauge-wrap">
+            <div class="gauge" id="gauge">
+              <svg viewBox="0 0 200 120"><path class="g-bg" d="M20 110 A80 80 0 0 1 180 110"/><path class="g-fg" id="gArc" d="M20 110 A80 80 0 0 1 180 110"/></svg>
+              <div class="g-val"><b id="gVal">0</b><span id="gUnit">Mbps</span></div>
+              <div class="g-phase" id="gPhase">Listo</div>
+            </div>
+            <button id="btnTest" class="btn primary big">Probar aquí</button>
+          </div>
+          <div class="results" id="results"></div>
+          <p class="hint" id="youHint"></p>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Pruebas recientes</h2></div>
+          <div class="table-wrap"><table class="tbl" id="surveyTbl"><thead><tr><th>Cuarto</th><th>Red</th><th class="num">Bajada</th><th class="num">Subida</th><th class="num">Ping</th><th></th></tr></thead><tbody></tbody></table></div>
+          <div class="divider"></div>
+          <h3>Internet desde la PC</h3>
+          <p class="sub">Mide la velocidad real de tu contrato por cable, sin WiFi de por medio.</p>
+          <div class="inet-row"><button id="btnInet" class="btn">Medir internet</button><div id="inetRes" class="inet-res"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CASA -->
+    <section id="tab-casa" class="tab">
+      <div class="card">
+        <div class="card-head">
+          <div><h2>Plano de tu casa</h2><p class="sub">Dibuja los cuartos, coloca el módem y el repetidor, y mira hasta dónde llega la señal.</p></div>
+          <div class="seg" id="planView"><button data-v="2d" class="on">Plano 2D</button><button data-v="3d">Casa 3D</button></div>
+        </div>
+        <div class="plan-tools">
+          <div class="seg" id="floorSeg" aria-label="Pisos"></div>
+          <label class="mini inline"><span>Ancho</span><input id="planW" type="number" min="4" max="60" step="0.5"></label>
+          <label class="mini inline"><span>Largo</span><input id="planH" type="number" min="4" max="60" step="0.5"></label>
+          <span class="unit">metros</span>
+          <button id="btnAddRoomPlan" class="btn">+ Cuarto</button>
+          <button id="btnAddRep" class="btn">+ Repetidor</button>
+          <button id="btnSuggest" class="btn">Sugerir lugar para repetidor</button>
+          <label class="tog"><input type="checkbox" id="heatToggle" checked> Señal estimada</label>
+          <button id="btnRotate" class="btn ghost" hidden>Girar: sí</button>
+        </div>
+        <div class="plan-layout">
+          <div class="plan-main"><div id="plan" class="plan"></div><div id="house3d" class="house3d" hidden></div></div>
+          <aside id="planSide" class="plan-side"></aside>
+        </div>
+      </div>
+      <div class="grid two">
+        <div class="card">
+          <div class="card-head"><div><h2>Cómo está conectada tu casa</h2><p class="sub">Del internet a tus aparatos.</p></div></div>
+          <div id="topo" class="topo"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div><h2>¿Dónde está cada router?</h2><p class="sub">Dime en qué cuarto está el módem y cada repetidor para darte recomendaciones de ubicación.</p></div></div>
+          <div id="places" class="places"></div>
+          <div class="add-room"><input id="newRoom" placeholder="Agregar cuarto…" maxlength="40"><button id="btnAddRoom" class="btn">Agregar</button></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><h2>Señal por cuarto</h2><p class="sub">Promedio de las últimas pruebas hechas desde el celular en cada lugar.</p></div></div>
+        <div id="roomInsight" class="insight"></div>
+        <div id="roomBars" class="room-bars"></div>
+      </div>
+    </section>
+
+    <!-- DISPOSITIVOS -->
+    <section id="tab-equipos" class="tab">
+      <div class="card">
+        <div class="card-head">
+          <div><h2>Dispositivos en tu red</h2><p class="sub" id="devSub"></p></div>
+          <div class="seg" id="devFilter"><button data-f="all" class="on">Todos</button><button data-f="on">En línea</button><button data-f="off">Desconectados</button></div>
+        </div>
+        <div id="devList" class="dev-list"></div>
+        <p class="hint">Toca un dispositivo para ponerle nombre. Los celulares que duermen no responden y pueden aparecer desconectados aunque sigan en la casa.</p>
+      </div>
+    </section>
+
+    <!-- LÍNEA -->
+    <section id="tab-linea" class="tab">
+      <div id="cableBox"></div>
+    </section>
+
+
+    <!-- ADMINISTRAR -->
+    <section id="tab-admin" class="tab">
+      <div class="card">
+        <div class="card-head"><div><h2>Tus equipos de red</h2><p class="sub">Accesos directos y dónde está cada opción en tu modelo.</p></div></div>
+        <div id="adminRouters" class="admin-grid"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><h2>Herramientas</h2><p class="sub">Se ejecutan en la PC donde corre WiFi Monitor.</p></div></div>
+        <div class="tools">
+          <div class="tool">
+            <h3>Ping y ruta</h3>
+            <p class="sub">¿Responde un equipo o sitio? ¿Por dónde pasa la conexión?</p>
+            <div class="tool-row"><input id="tHost" placeholder="google.com o 192.168.0.2" maxlength="120"><button class="btn" id="tPing">Ping</button><button class="btn" id="tTrace">Ruta</button></div>
+          </div>
+          <div class="tool">
+            <h3>Comparar DNS</h3>
+            <p class="sub">Resuelve un nombre con el sistema, el módem, Cloudflare y Google.</p>
+            <div class="tool-row"><input id="tDns" placeholder="api.steampowered.com" maxlength="120"><button class="btn" id="tDnsGo">Comparar</button></div>
+          </div>
+          <div class="tool">
+            <h3>Encender una PC (Wake-on-LAN)</h3>
+            <p class="sub">La PC debe tener Wake-on-LAN activado y estar conectada por cable.</p>
+            <div class="tool-row"><select id="tWol"></select><button class="btn" id="tWolGo">Encender</button></div>
+          </div>
+          <div class="tool">
+            <h3>Limpiar caché DNS</h3>
+            <p class="sub">Útil después de cambiar de DNS o si una página no carga.</p>
+            <div class="tool-row"><button class="btn" id="tFlush">Limpiar ahora</button></div>
+          </div>
+        </div>
+        <pre id="tOut" class="tool-out" hidden></pre>
+      </div>
+    </section>
+
+    <!-- MEJORAS -->
+    <section id="tab-mejoras" class="tab">
+      <div class="card">
+        <div class="card-head"><div><h2>Recomendaciones</h2><p class="sub">Se calculan con lo que se ha medido. Se actualizan solas.</p></div></div>
+        <div id="advAll" class="adv-list"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><h2>Seguridad</h2><p class="sub">Marca lo que ya hiciste.</p></div></div>
+        <div id="checklist" class="checklist"></div>
+      </div>
+    </section>
+
+    <!-- EVENTOS -->
+    <section id="tab-eventos" class="tab">
+      <div class="grid two wide-left">
+        <div class="card">
+          <div class="card-head"><h2>Eventos</h2><div class="seg" id="evFilter"><button data-l="all" class="on">Todos</button><button data-l="2">Problemas</button><button data-l="1">Avisos</button></div></div>
+          <ul id="evAll" class="events"></ul>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Registros</h2></div>
+          <p class="sub">Archivos CSV diarios guardados en esta PC (carpeta <code>.wifimonitor</code>).</p>
+          <ul id="logList" class="logs"></ul>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="tip" class="tip" hidden></div>
+
+  <dialog id="qrDlg">
+    <form method="dialog" class="dlg">
+      <h2>Ábrelo en el celular</h2>
+      <p class="sub">Conecta el celular a la WiFi de tu casa y escanea el código con la cámara.</p>
+      <img id="qrImg" alt="Código QR con la dirección del monitor" width="220" height="220">
+      <div id="qrUrls" class="qr-urls"></div>
+      <p class="hint">¿No abre? En Windows permite a Node.js en el Firewall para "Redes privadas".</p>
+      <button class="btn primary">Listo</button>
+    </form>
+  </dialog>
+
+  <dialog id="nameDlg">
+    <form method="dialog" class="dlg" id="nameForm">
+      <h2 id="nameTitle">Nombre</h2>
+      <p class="sub" id="nameSub"></p>
+      <input id="nameInput" maxlength="40" autocomplete="off">
+      <div class="dlg-actions"><button value="clear" class="btn ghost">Quitar nombre</button><button value="cancel" class="btn ghost">Cancelar</button><button value="ok" class="btn primary">Guardar</button></div>
+    </form>
+  </dialog>
+
+  <script type="importmap">{ "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/examples/jsm/" } }</script>
+  <script src="/app.js"></script>
+  <script src="/plan.js"></script>
+  <script src="/admin.js"></script>
+</body>
+</html>

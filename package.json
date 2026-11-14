@@ -1,0 +1,25 @@
+{
+  "name": "wifimonitor",
+  "version": "2.0.0",
+  "description": "Monitor de la red de tu casa en el navegador: módem, internet, DNS, línea de cable, dispositivos y pruebas de señal por cuarto desde el celular.",
+  "bin": {
+    "wifimonitor": "bin/wifimonitor.js"
+  },
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "demo": "node src/server.js --demo"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4",
+    "three": "^0.187.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GaelCMora/wifimonitor"
+  }
+}
