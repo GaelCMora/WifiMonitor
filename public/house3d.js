@@ -83,7 +83,7 @@ function init(el) {
     for (const w of waves) {
       const k = (t * 0.45 + w.phase) % 1;
       w.mesh.scale.setScalar(0.2 + k * w.reach);
-      w.mesh.material.opacity = 0.2 * (1 - k);
+      w.mesh.material.opacity = 0.14 * (1 - k);
     }
     controls.update();
     renderer.render(scene, camera);
@@ -198,12 +198,20 @@ function build(data) {
     const hit = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 1.8, 12), new THREE.MeshBasicMaterial({ visible: false }));
     hit.position.y = 0.9; hit.userData.pin = p; grp.add(hit);
     pinMeshes.push(hit);
-    const color = new THREE.Color(p.main ? css('--s1') || '#3987e5' : '#1baf7a');
-    for (let i = 0; i < 3; i++) {
-      const sph = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16),
-        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.2, side: THREE.DoubleSide, depthWrite: false }));
-      sph.position.y = 1.05; grp.add(sph);
-      waves.push({ mesh: sph, phase: i / 3, reach: 3.2 });
+    const view = window.Plan.view();
+    if (view.focus === 'all' || view.focus === p.id) {
+      // una onda por banda: 2.4 GHz llega más lejos que 5 GHz
+      const bands = view.band === 'best' ? ['2.4', '5'] : [view.band];
+      for (const bnd of bands) {
+        const color = new THREE.Color(bnd === '5' ? '#9085e9' : (p.main ? css('--s1') || '#3987e5' : '#1baf7a'));
+        const reach = Math.min(9, window.Plan.reach(bnd) * 0.4);
+        for (let i = 0; i < 2; i++) {
+          const sph = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16),
+            new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.2, side: THREE.DoubleSide, depthWrite: false }));
+          sph.position.y = 1.05; grp.add(sph);
+          waves.push({ mesh: sph, phase: i / 2 + (bnd === '5' ? 0.25 : 0), reach });
+        }
+      }
     }
     const lbl = textSprite(p.name, p.main ? 'da el internet' : 'repetidor', p.main ? '#9cc4f5' : '#7fe0b9', true, 0.7);
     lbl.position.y = 1.7; grp.add(lbl);
@@ -382,7 +390,7 @@ function bar() {
   b.append(floors, walls, h('label', { class: 'h3d-range' }, h('span', { text: 'Separar pisos' }), explode), rot, center, imp, file);
   statusEl = h('div', { class: 'h3d-status', hidden: true });
   const model = h('div', { class: 'h3d-model', id: 'h3dModel', hidden: true });
-  const hint = h('p', { class: 'hint h3d-hint', text: 'Arrastra el módem o el repetidor para moverlo. Arrastra el fondo para girar, rueda o pellizco para acercar.' });
+  const hint = h('p', { class: 'hint h3d-hint', text: 'Ondas: azul/verde = 2.4 GHz (llega más lejos), morado = 5 GHz (más rápida, alcance menor). Arrastra el módem o el repetidor para moverlo; arrastra el fondo para girar.' });
   return [b, model, statusEl, hint];
 }
 

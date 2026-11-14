@@ -7,12 +7,21 @@ const Plan = (() => {
   const CELL = 0.25;                    // resolución del mapa de calor
   const WALL_DB = 6;                    // pérdida por pared (aprox. tablaroca/ladrillo ligero)
   const LEVELS = [
-    { min: -60, name: 'Excelente', c: [12, 163, 12] },
-    { min: -68, name: 'Buena', c: [120, 190, 40] },
-    { min: -76, name: 'Regular', c: [250, 178, 25] },
-    { min: -84, name: 'Débil', c: [236, 131, 90] },
-    { min: -999, name: 'Sin señal', c: [208, 59, 59] },
+    { min: -60, name: 'Excelente', c: [12, 163, 12], dbm: '−60 o más', use: 'todo, a máxima velocidad' },
+    { min: -68, name: 'Buena', c: [120, 190, 40], dbm: '−60 a −68', use: 'video 4K, juegos, llamadas' },
+    { min: -76, name: 'Regular', c: [250, 178, 25], dbm: '−68 a −76', use: 'video HD, navegar' },
+    { min: -84, name: 'Débil', c: [236, 131, 90], dbm: '−76 a −84', use: 'lento, se corta' },
+    { min: -999, name: 'Sin señal', c: [208, 59, 59], dbm: 'menos de −84', use: 'no conecta' },
   ];
+  // Modelo de propagación por banda (log-distance): señal a 1 m, exponente, pérdida por pared y por losa.
+  const BANDS = {
+    '2.4': { ref: -35, n: 2.8, wall: 5, slab: 13, label: '2.4 GHz' },
+    '5': { ref: -41, n: 3.1, wall: 8, slab: 18, label: '5 GHz' },
+  };
+  let band = 'best';        // 'best' | '2.4' | '5'
+  let focus = 'all';        // 'all' | id del router
+  try { const v = JSON.parse(localStorage.getItem('wm-heat') || '{}'); band = v.band || band; focus = v.focus || focus; } catch { /* */ }
+  const saveView = () => { try { localStorage.setItem('wm-heat', JSON.stringify({ band, focus })); } catch { /* */ } };
 
   let plan = null;          // { w, h, rooms:[{id,name,x,y,w,h}], pins:{ip:{x,y}}, extra:[{id,name,x,y}] }
   let sel = null;           // id del cuarto seleccionado
@@ -88,18 +97,31 @@ const Plan = (() => {
     for (const r of roomsOf(f)) total += segHitsRect(x1, y1, x2, y2, r);
     return Math.ceil(total / 2);      // una pared compartida cuenta una sola vez
   }
-  function rssiFrom(s, x, y, f) {
+  /** Señal (dBm) que llega a (x,y) del piso f desde el router s en la banda b. */
+  function rssiFrom(s, x, y, f, b = '2.4') {
+    const B = BANDS[b];
     const df = Math.abs((s.floor || 0) - f);
     const d = Math.max(0.5, Math.hypot(s.x - x, s.y - y, df * FLOOR_H));
-    // paredes del piso del router y, si es otro piso, también las del piso destino (a la mitad)
+    // paredes del piso del router y, si es otro piso, también las del piso destino (promedio)
     let w = walls(s.x, s.y, x, y, f);
     if (df) w = Math.ceil((w + walls(s.x, s.y, x, y, s.floor || 0)) / 2);
-    return -38 - 10 * 2.8 * Math.log10(d) - w * WALL_DB - df * SLAB_DB;
+    return B.ref - 10 * B.n * Math.log10(d) - w * B.wall - df * B.slab;
   }
+  /** Mejor señal en un punto según la vista elegida (banda y router). */
   function bestRssi(x, y, f, sources) {
     let best = -999;
-    for (const s of sources) best = Math.max(best, rssiFrom(s, x, y, f));
+    const bands = band === 'best' ? ['2.4', '5'] : [band];
+    for (const s of sources) {
+      if (focus !== 'all' && s.id !== focus && !s.virtual) continue;
+      for (const b of bands) best = Math.max(best, rssiFrom(s, x, y, f, b));
+    }
     return best;
+  }
+  /** Todas las lecturas en un punto: cada router en cada banda. */
+  function readings(x, y, f) {
+    const names = new Map(routers().map((r) => [r.id, r.name]));
+    return placedSources().map((s) => ({ id: s.id, name: names.get(s.id) || s.id, r24: rssiFrom(s, x, y, f, '2.4'), r5: rssiFrom(s, x, y, f, '5') }))
+      .sort((a, b) => Math.max(b.r24, b.r5) - Math.max(a.r24, a.r5));
   }
   function levelOf(v) { return LEVELS.find((l) => v >= l.min); }
 
@@ -125,7 +147,7 @@ const Plan = (() => {
     let best = null;
     for (const r of plan.rooms) {
       for (let x = r.x + 0.5; x < r.x + r.w; x += 0.5) for (let y = r.y + 0.5; y < r.y + r.h; y += 0.5) {
-        const sc = score({ x, y, floor: r.floor || 0 });
+        const sc = score({ x, y, floor: r.floor || 0, virtual: true });
         if (!best || sc > best.sc) best = { x, y, sc, room: r.name, floor: r.floor || 0 };
       }
     }
@@ -139,6 +161,13 @@ const Plan = (() => {
     if (!plan) plan = Object.assign(defaults(), S.settings.plan || {});
     normalize();
     renderFloors();
+    const fsel = $('#heatFocus');
+    if (fsel) {
+      const rs = routers();
+      if (focus !== 'all' && !rs.find((r) => r.id === focus)) focus = 'all';
+      fsel.replaceChildren(h('option', { value: 'all', text: 'Todos los routers' }), ...rs.map((r) => h('option', { value: r.id, text: 'Solo ' + r.name })));
+      fsel.value = focus;
+    }
     box.replaceChildren();
     const W = box.clientWidth || 600;
     scale = Math.max(18, Math.min(70, (W - 2) / plan.w));
@@ -230,7 +259,7 @@ const Plan = (() => {
       e.preventDefault();
     });
     svg.addEventListener('pointermove', (e) => {
-      if (!drag) return;
+      if (!drag) { if (e.pointerType === 'mouse' || e.buttons === 0) probe(svg, e); return; }
       const m = toMeters(svg, e);
       if (drag.kind === 'pin') {
         const x = Math.max(0, Math.min(plan.w, snap(m.x))), y = Math.max(0, Math.min(plan.h, snap(m.y)));
@@ -256,7 +285,25 @@ const Plan = (() => {
       if (moved) save();
     };
     svg.addEventListener('pointerup', end);
+    svg.addEventListener('pointerleave', () => { $('#tip').hidden = true; });
     svg.addEventListener('pointercancel', end);
+  }
+
+  /** Muestra la señal estimada en el punto bajo el puntero: cada router y cada banda. */
+  function probe(svg, e) {
+    const m = toMeters(svg, e);
+    const tip = $('#tip');
+    const room = roomAt(m.x, m.y, cur);
+    if (!room) { tip.hidden = true; return; }
+    const rs = readings(m.x, m.y, cur);
+    if (!rs.length) { tip.hidden = true; return; }
+    const row = (v, lbl) => { const l = levelOf(v); return h('div', { class: 'tr' }, h('i', { style: `background:rgb(${l.c.join(',')});height:8px;width:8px;border-radius:50%` }), h('b', { text: Math.round(v) + ' dBm' }), h('span', { text: `${lbl} · ${l.name}` })); };
+    tip.replaceChildren(h('div', { class: 'tt', text: `${room.name} · ${m.x.toFixed(1)}, ${m.y.toFixed(1)} m` }),
+      ...rs.flatMap((r) => [h('div', { class: 'tsub', text: r.name }), row(r.r24, '2.4 GHz'), row(r.r5, '5 GHz')]));
+    tip.hidden = false;
+    const tr = tip.getBoundingClientRect();
+    let lx = e.clientX + 16; if (lx + tr.width > innerWidth - 8) lx = e.clientX - tr.width - 16;
+    tip.style.left = lx + 'px'; tip.style.top = Math.max(8, Math.min(innerHeight - tr.height - 8, e.clientY - tr.height / 2)) + 'px';
   }
 
   /** Mueve el rectángulo mientras se arrastra sin redibujar todo el mapa. */
@@ -298,13 +345,16 @@ const Plan = (() => {
     floorPanel(side);
     equipmentPanel(side);
     // leyenda
+    const focusName = focus === 'all' ? 'todos los routers' : ((routers().find((r) => r.id === focus) || {}).name || 'router');
     side.append(h('div', { class: 'side-h', text: 'Señal estimada' }),
-      h('div', { class: 'heat-legend' }, ...LEVELS.map((l) => h('span', {}, h('i', { style: `background:rgba(${l.c.join(',')},.55)` }), l.name))));
+      h('p', { class: 'hint', style: 'margin:0', text: `${band === 'best' ? 'Mejor banda (2.4 o 5 GHz)' : BANDS[band].label} · ${focusName}. Pasa el mouse por el plano para ver cada router.` }),
+      h('div', { class: 'heat-legend' }, ...LEVELS.map((l) => h('span', {}, h('i', { style: `background:rgba(${l.c.join(',')},.55)` }),
+        h('span', { class: 'lg' }, h('b', { text: l.name }), h('small', { text: `${l.dbm} dBm · ${l.use}` }))))));
     if (suggestion) {
       side.append(h('div', { class: 'insight', style: 'margin-top:12px' }, 'Pon el repetidor (conectado por cable) en ', h('b', { text: suggestion.room + (plan.floors.length > 1 ? ' · ' + plan.floors[suggestion.floor || 0] : '') }),
         ', donde marca el círculo. ', suggestion.gain > 0.5 ? `Mejora la señal de las zonas débiles en ~${Math.round(suggestion.gain)} dB en promedio.` : 'La mejora sería pequeña: tu cobertura ya está bien.'));
     }
-    side.append(h('p', { class: 'hint', text: 'Es una estimación: supone paredes ligeras (~6 dB cada una). Concreto, espejos y muebles grandes la reducen más. Las pruebas reales del celular mandan.' }));
+    side.append(h('p', { class: 'hint', text: 'Es una estimación: cada pared resta ~5 dB en 2.4 GHz y ~8 dB en 5 GHz, cada losa 13–18 dB. Concreto, espejos y muebles grandes restan más. Las pruebas reales del celular mandan.' }));
   }
 
   // ------------------------------------------------------------ pisos
@@ -347,13 +397,13 @@ const Plan = (() => {
     if (plan.floors.length < 2 && cur === 0) return;
     const name = h('input', { value: plan.floors[cur], maxlength: 30, 'aria-label': 'Nombre del piso' });
     name.addEventListener('change', () => { plan.floors[cur] = name.value.trim() || plan.floors[cur]; render(); save(); });
-    side.append(h('div', { class: 'side-h', text: 'Piso actual' }), name,
-      cur > 0 ? h('button', { class: 'btn ghost danger', type: 'button', text: 'Borrar este piso', onclick: () => {
+    side.append(h('div', { class: 'side-h', text: 'Piso actual' }), name);
+    if (cur > 0) side.append( h('button', { class: 'btn ghost danger', type: 'button', text: 'Borrar este piso', onclick: () => {
         if (!confirm(`¿Borrar "${plan.floors[cur]}" y sus cuartos?`)) return;
         plan.rooms = plan.rooms.filter((r) => (r.floor || 0) !== cur).map((r) => ((r.floor || 0) > cur ? { ...r, floor: r.floor - 1 } : r));
         for (const [k, p] of Object.entries(plan.pins)) { if ((p.floor || 0) === cur) delete plan.pins[k]; else if ((p.floor || 0) > cur) p.floor--; }
         plan.floors.splice(cur, 1); cur = Math.max(0, cur - 1); render(); save();
-      } }) : null);
+      } }));
   }
 
   // ------------------------------------------------------------ API
@@ -391,6 +441,9 @@ const Plan = (() => {
       render();
     });
     $('#heatToggle').addEventListener('change', (e) => { showHeat = e.target.checked; render(); });
+    $('#heatBand').value = band;
+    $('#heatBand').addEventListener('change', (e) => { band = e.target.value; saveView(); suggestion = null; render(); if (!$('#house3d').hidden && window.House3D) window.House3D.show($('#house3d')); });
+    $('#heatFocus').addEventListener('change', (e) => { focus = e.target.value; saveView(); render(); if (!$('#house3d').hidden && window.House3D) window.House3D.show($('#house3d')); });
     $('#planW').addEventListener('change', (e) => setSize(e.target.value, plan.h));
     $('#planH').addEventListener('change', (e) => setSize(plan.w, e.target.value));
     $('#planView').addEventListener('click', async (e) => {
@@ -454,7 +507,10 @@ const Plan = (() => {
     plan.model = model;
     save();
   }
-  return { init, refresh, render, data, heatCanvas, setPin, saveModel, setSize, levels: LEVELS };
+  /** Distancia (m, sin paredes) a la que la señal baja a −72 dBm: para el tamaño de las ondas en 3D. */
+  function reach(b) { const B = BANDS[b === 'best' ? '2.4' : b]; return Math.pow(10, (B.ref + 72) / (10 * B.n)); }
+  function view() { return { band, focus }; }
+  return { init, refresh, render, data, heatCanvas, setPin, saveModel, setSize, view, reach, levels: LEVELS };
 })();
 window.Plan = Plan;
 Plan.init();

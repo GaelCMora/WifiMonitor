@@ -174,13 +174,13 @@ main { padding: 18px clamp(14px, 3vw, 28px) 40px; max-width: 1280px; margin: 0 a
 .chart .endlbl { font-size: 11.5px; font-weight: 650; fill: var(--ink-2); }
 .empty { color: var(--muted); font-size: 14px; padding: 30px 0; text-align: center; }
 
-.tip { position: fixed; z-index: 50; pointer-events: none; background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 10px; padding: 8px 10px;
+#tip { position: fixed; z-index: 50; pointer-events: none; background: var(--surface-2); border: 1px solid var(--line-2); border-radius: 10px; padding: 8px 10px;
   font-size: 12.5px; box-shadow: 0 10px 30px rgba(0, 0, 0, .35); min-width: 140px; }
-.tip .tt { color: var(--muted); margin-bottom: 4px; font-variant-numeric: tabular-nums; }
-.tip .tr { display: flex; align-items: center; gap: 7px; }
-.tip .tr i { width: 12px; height: 2px; border-radius: 2px; }
-.tip .tr b { font-variant-numeric: tabular-nums; min-width: 52px; }
-.tip .tr span { color: var(--ink-2); }
+#tip .tt { color: var(--muted); margin-bottom: 4px; font-variant-numeric: tabular-nums; }
+#tip .tr { display: flex; align-items: center; gap: 7px; }
+#tip .tr i { width: 12px; height: 2px; border-radius: 2px; }
+#tip .tr b { font-variant-numeric: tabular-nums; min-width: 52px; }
+#tip .tr span { color: var(--ink-2); }
 
 /* ---------- recomendaciones ---------- */
 .adv-list { display: flex; flex-direction: column; gap: 10px; }
@@ -436,3 +436,9 @@ dialog::backdrop { background: rgba(0, 0, 0, .55); backdrop-filter: blur(3px); }
 .guide { grid-template-columns: minmax(120px, 34%) 1fr; }
 
 .plan-layout.wide { grid-template-columns: 1fr; }
+
+.heat-legend .lg { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.25; }
+.heat-legend .lg small { color: var(--muted); font-size: 11.5px; }
+.heat-legend > span { align-items: flex-start; }
+.heat-legend i { margin-top: 3px; flex: none; }
+#tip .tsub { font-weight: 700; margin-top: 6px; font-size: 12px; }

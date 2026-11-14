@@ -75,7 +75,7 @@ Todo se guarda en `~/.wifimonitor` (en Windows: `C:\Users\TU_USUARIO\.wifimonito
 
 ## Notas
 
-- La señal estimada del plano es aproximada: asume paredes ligeras (~6 dB) y losas de ~15 dB. Las pruebas reales del celular son las que mandan.
+- La señal estimada del plano es aproximada: usa un modelo por banda: cada pared resta ~5 dB en 2.4 GHz y ~8 dB en 5 GHz, y cada losa entre 13 y 18 dB. Las pruebas reales del celular son las que mandan.
 - Los celulares que duermen no responden ping y pueden aparecer como desconectados.
 - WiFi Monitor no cambia la configuración de tus routers: te lleva a su panel y te dice qué cambiar.
 - Está pensado para la red de tu casa. No lo expongas a internet.
