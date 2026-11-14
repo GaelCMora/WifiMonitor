@@ -169,7 +169,7 @@
         <div class="card-head">
           <div><h2>Dispositivos en tu red</h2><p class="sub" id="devSub"></p></div>
           <div class="dev-actions">
-            <button id="btnClients" class="btn">Importar lista del router</button>
+            <button id="btnClients" class="btn">Conectar con el router</button>
             <div class="seg" id="devFilter"><button data-f="all" class="on">Todos</button><button data-f="on">En línea</button><button data-f="off">Desconectados</button><button data-f="unk">Sin reconocer</button></div>
           </div>
         </div>
@@ -261,6 +261,29 @@
 
   <dialog id="clientsDlg">
     <form method="dialog" class="dlg wide-dlg">
+      <div class="seg" id="clMode"><button type="button" data-m="auto" class="on">Automático</button><button type="button" data-m="paste">Pegar una vez</button></div>
+      <div id="clAuto">
+        <h2>Leer el router automáticamente</h2>
+        <p class="sub">La app repetirá cada 2 minutos lo mismo que hace tu navegador al abrir la lista de clientes. Funciona con cualquier marca.</p>
+        <ol class="side-steps">
+          <li>En el navegador de esta PC abre el panel del router y <b>cierra sesión</b>.</li>
+          <li>Presiona <b>F12</b> → pestaña <b>Red / Network</b> → marca <b>Preserve log</b>.</li>
+          <li><b>Inicia sesión</b>. En la lista de Network, clic derecho en la petición de inicio de sesión (la que se envía al darle "Entrar", casi siempre tipo POST) → <b>Copiar → Copiar como cURL (bash)</b> y pégala en el primer cuadro.</li>
+          <li>Abre la <b>Lista de clientes</b> (Inalámbrico de 2.4 → Lista de clientes). Clic derecho en esa petición → <b>Copiar como cURL (bash)</b> → pégala en el segundo cuadro.</li>
+          <li>Repite el paso 4 para la lista de 5 GHz, eligiendo la banda.</li>
+        </ol>
+        <div class="row2">
+          <label class="mini"><span>Router</span><select id="lkAp"></select></label>
+          <label class="mini"><span>Banda de esa lista</span><select id="lkBand"><option value="2.4">2.4 GHz</option><option value="5">5 GHz</option></select></label>
+        </div>
+        <label class="mini"><span>1. Petición de inicio de sesión (opcional, pero sin ella deja de funcionar cuando se vence la sesión)</span><textarea id="lkLogin" rows="3" placeholder="curl 'http://192.168.0.1/…' -H … --data-raw '…'"></textarea></label>
+        <label class="mini"><span>2. Petición de la lista de clientes</span><textarea id="lkList" rows="3" placeholder="curl 'http://192.168.0.1/…' -H …"></textarea></label>
+        <p class="hint" style="margin:0">La petición de inicio de sesión incluye tu contraseña del router: se guarda solo en esta PC (carpeta .wifimonitor) y nunca sale de tu red. Algunos routers permiten una sola sesión: si al abrir el panel te saca, es por esto.</p>
+        <div id="lkResult" class="hint"></div>
+        <div id="lkList2" class="links-list"></div>
+        <div class="dlg-actions"><button value="cancel" class="btn ghost">Cerrar</button><button class="btn primary" id="lkGo" type="button">Guardar y probar</button></div>
+      </div>
+      <div id="clPaste" hidden>
       <h2>Importar la lista de clientes del router</h2>
       <p class="sub">Así la app sabe el nombre real de cada aparato, a qué router y banda está conectado y con cuánta señal (para ubicarlo en el plano).</p>
       <ol class="side-steps">
@@ -275,6 +298,7 @@
       <textarea id="clText" rows="8" placeholder="Pega aquí la tabla (Nombre, IP, MAC, RSSI)…"></textarea>
       <div id="clResult" class="hint"></div>
       <div class="dlg-actions"><button value="cancel" class="btn ghost">Cerrar</button><button value="import" class="btn primary" id="clGo">Importar</button></div>
+      </div>
     </form>
   </dialog>
 

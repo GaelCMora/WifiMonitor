@@ -86,7 +86,7 @@ function history(minutes) {
 function fullState(req) {
   return {
     now: Date.now(), demo: DEMO, port: PORT, urls: lanUrls(), you: clientIp(req), local: isLoopback(clientIp(req)),
-    firewall: mon.firewall || null, lanSeen: mon.lanSeen || null,
+    firewall: mon.firewall || null, lanSeen: mon.lanSeen || null, links: mon.linkStatus ? mon.linkStatus() : [],
     summary: mon.summary(), health: mon.health(), devices: deviceList(), rooms: mon.rooms(),
     survey: mon.survey.slice(-60), advice: advice(mon), events: mon.events.slice(-150).reverse(),
     settings: { rooms: mon.settings.rooms, places: mon.settings.places, checklist: mon.settings.checklist, internetHost: mon.settings.internetHost, plan: mon.settings.plan || null },
@@ -225,6 +225,26 @@ async function handle(req, res) {
       const b = await readBody(req, 256 * 1024);
       const found = mon.importClients(String(b.text || ''), String(b.ap || ''), String(b.band || '2.4'));
       return send(res, 200, { ok: true, count: found.length, found });
+    }
+    if (p === '/api/links' && req.method === 'POST') {
+      if (!isLoopback(cip)) return send(res, 403, { error: 'Configúralo desde la PC donde corre WiFi Monitor (contiene tu contraseña del router).' });
+      const b = await readBody(req, 256 * 1024);
+      const { parseCurl } = require('./routerlink');
+      if (b.remove) {
+        mon.settings.links = (mon.settings.links || []).filter((l) => l.id !== b.remove);
+        mon.links && mon.links.delete(b.remove);
+        mon.saveSettings();
+        return send(res, 200, { ok: true, links: mon.linkStatus() });
+      }
+      try { parseCurl(b.list); if (b.login) parseCurl(b.login); } catch (e) { return send(res, 400, { error: e.message }); }
+      const cfg = { id: Math.random().toString(36).slice(2, 9), ap: String(b.ap || '').slice(0, 40), band: b.band === '5' ? '5' : '2.4', login: String(b.login || '').slice(0, 20000), list: String(b.list).slice(0, 20000) };
+      const link = mon.addLink(cfg);
+      const st = await link.poll();
+      if (!st.ok) { mon.links.delete(cfg.id); return send(res, 200, { ok: false, error: st.error }); }
+      mon.settings.links = (mon.settings.links || []).concat([cfg]);
+      mon.saveSettings();
+      mon.emit('devices');
+      return send(res, 200, { ok: true, count: st.count, links: mon.linkStatus() });
     }
     if (p === '/api/trust' && req.method === 'POST') {
       const b = await readBody(req);

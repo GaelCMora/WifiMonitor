@@ -72,7 +72,7 @@ const fmt = {
 };
 const api = async (p, opts = {}) => {
   const r = await fetch(p, Object.assign({ cache: 'no-store', headers: opts.body ? { 'Content-Type': 'application/json' } : {} }, opts));
-  if (!r.ok) throw new Error('HTTP ' + r.status);
+  if (!r.ok) { let msg = 'HTTP ' + r.status; try { const j = await r.json(); if (j.error) msg = j.error; } catch { /* */ } throw new Error(msg); }
   return r.headers.get('content-type')?.includes('json') ? r.json() : r.text();
 };
 const post = (p, body) => api(p, { method: 'POST', body: JSON.stringify(body) });
@@ -641,7 +641,7 @@ function renderDevices() {
       h('div', { class: 'dev-ic' }, h('span', { html: ICON[d.kind] || ICON.unknown, style: 'display:grid' }), h('i', { class: 'dot ' + st })),
       h('div', { class: 'dev-m' }, h('b', {}, d.trusted ? null : h('span', { class: 'unk-tag', text: '¿Es tuyo?' }), d.name),
         h('span', { text: [KIND_TXT[d.kind] || '', d.vendor].filter(Boolean).join(' · ') || '—' }),
-        d.client ? h('span', { class: 'cl-line', text: clientLine(d.client) }) : null,
+        d.client ? h('span', { class: 'cl-line', text: clientLine(d.client, d.mac) }) : null,
         h('span', { class: 'mono', text: `${d.ip}${d.mac ? ' · ' + d.mac : ''}` })),
       h('div', { class: 'dev-r' }, h('b', { text: d.online ? (d.ms === null ? 'en ARP' : fmt.ms(d.ms) + ' ms') : 'desconectado' }), h('span', { text: since }), d.drops ? h('div', { text: `${d.drops} caída${d.drops === 1 ? '' : 's'}` }) : null));
   }) : [h('div', { class: 'empty', text: S.summary.lastSweep ? 'Nada con este filtro.' : 'Buscando dispositivos (tarda ~1 min)…' })]));
@@ -660,8 +660,9 @@ function closeness(rssi) {
   if (rssi >= -80) return 'lejos';
   return 'en el límite (¿afuera?)';
 }
-function clientLine(c) {
-  return `${apLabel(c.ap)} · ${c.band} GHz${c.rssi !== null && c.rssi !== undefined ? ` · ${c.rssi} dBm · ${closeness(c.rssi)}` : ''}`;
+function clientLine(c, mac) {
+  const zone = mac && window.Plan ? window.Plan.zoneOf(mac) : null;
+  return `${apLabel(c.ap)} · ${c.band} GHz${c.rssi !== null && c.rssi !== undefined ? ` · ${c.rssi} dBm · ${closeness(c.rssi)}` : ''}${zone ? ' · ' + zone : ''}`;
 }
 
 function rename(d) {
@@ -671,7 +672,7 @@ function rename(d) {
   $('#nameInput').value = d.alias || d.name;
   $('#trustInput').checked = !!d.trusted;
   $('#trustInput').disabled = !d.mac;
-  $('#nameInfo').textContent = d.client ? 'Conectado a ' + clientLine(d.client) : 'Pega la lista de clientes del router para ver a qué router está conectado y con cuánta señal.';
+  $('#nameInfo').textContent = d.client ? 'Conectado a ' + clientLine(d.client, d.mac) : 'Pega la lista de clientes del router para ver a qué router está conectado y con cuánta señal.';
   dlg.returnValue = '';
   dlg.onclose = async () => {
     const key = d.mac || d.ip;
@@ -689,8 +690,32 @@ $('#btnClients').addEventListener('click', () => {
   const routers = S.devices.filter((d) => d.kind === 'modem' || d.kind === 'router' || d.ip === gw);
   if (gw && !routers.find((r) => r.ip === gw)) routers.unshift({ ip: gw, name: 'Módem principal' });
   $('#clAp').replaceChildren(...routers.map((r) => h('option', { value: r.ip, text: `${r.name} (${r.ip})` })));
+  $('#lkAp').replaceChildren(...routers.map((r) => h('option', { value: r.ip, text: `${r.name} (${r.ip})` })));
   $('#clResult').textContent = '';
+  $('#lkResult').textContent = S.local ? '' : 'La conexión automática se configura desde la PC donde corre WiFi Monitor (porque guarda la contraseña del router).';
+  $('#lkGo').disabled = !S.local;
+  renderLinks();
   $('#clientsDlg').showModal();
+});
+$('#clMode').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  $$('#clMode button').forEach((x) => x.classList.toggle('on', x === b));
+  $('#clAuto').hidden = b.dataset.m !== 'auto'; $('#clPaste').hidden = b.dataset.m === 'auto';
+});
+function renderLinks() {
+  const box = $('#lkList2');
+  box.replaceChildren(...(S.links || []).map((l) => h('div', { class: 'link-row' },
+    badge(l.status && l.status.ok ? 'good' : l.status && l.status.ok === false ? 'critical' : 'warning', l.status && l.status.ok ? `${l.status.count} aparatos` : l.status && l.status.ok === false ? 'Falla' : 'Pendiente'),
+    h('span', { text: `${apLabel(l.ap)} · ${l.band} GHz${l.hasLogin ? '' : ' · sin inicio de sesión'}${l.status && l.status.error ? ' — ' + l.status.error : ''}` }),
+    S.local ? h('button', { class: 'x', type: 'button', title: 'Quitar', text: '✕', onclick: async () => { await post('/api/links', { remove: l.id }); await load(); renderLinks(); } }) : null)));
+}
+$('#lkGo').addEventListener('click', async () => {
+  $('#lkResult').textContent = 'Probando…';
+  try {
+    const r = await post('/api/links', { ap: $('#lkAp').value, band: $('#lkBand').value, login: $('#lkLogin').value.trim(), list: $('#lkList').value.trim() });
+    if (r.ok) { $('#lkResult').textContent = `¡Listo! Leí ${r.count} aparatos. Se actualizará solo cada 2 minutos.`; $('#lkList').value = ''; await load(); renderLinks(); }
+    else $('#lkResult').textContent = 'No funcionó: ' + (r.error || 'revisa que copiaste las peticiones correctas');
+  } catch (e) { $('#lkResult').textContent = 'Error: ' + e.message; }
 });
 $('#clGo').addEventListener('click', async (e) => {
   e.preventDefault();

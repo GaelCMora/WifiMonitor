@@ -476,3 +476,11 @@ textarea { width: 100%; font: 12.5px ui-monospace, Consolas, monospace; color: v
 .who-chip.unk { background: color-mix(in srgb, var(--warning) 18%, transparent); color: var(--warning); }
 @media (max-width: 1020px) { .house-row { grid-template-columns: 1fr; } }
 @media (max-width: 640px) { .house-mini { height: 240px; } }
+
+.dev-zone { fill: var(--accent); opacity: .28; pointer-events: none; }
+.plan-stage { overflow: visible; }
+
+#clMode { margin-bottom: 6px; align-self: flex-start; }
+.links-list { display: flex; flex-direction: column; gap: 6px; }
+.link-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); }
+.link-row .x { margin-left: auto; background: none; border: 0; color: var(--muted); cursor: pointer; }

@@ -141,6 +141,51 @@ const Plan = (() => {
   }
   function hashAngle(str) { let h = 0; for (const c of str) h = (h * 31 + c.charCodeAt(0)) >>> 0; return (h % 360) * Math.PI / 180; }
   /** Posición de cada dispositivo: la que pusiste a mano, o estimada alrededor de su router. */
+  /**
+   * Ubica un aparato usando la forma de la casa: prueba cada punto del plano (todos los pisos),
+   * calcula la señal que el router recibiría desde ahí (distancia + paredes + losas) y se queda
+   * con la zona donde coincide con la medida. Devuelve la zona, el cuarto más probable y un punto.
+   */
+  const zoneCache = new Map();
+  function locate(apPin, rssi, band) {
+    const key = [apPin.x, apPin.y, apPin.floor || 0, rssi, band, plan.w, plan.h, plan.rooms.length, JSON.stringify(plan.rooms.map((r) => [r.x, r.y, r.w, r.h, r.floor]))].join('|');
+    if (zoneCache.has(key)) return zoneCache.get(key);
+    const src = { x: apPin.x, y: apPin.y, floor: apPin.floor || 0 };
+    const UPLINK = 5;   // el celular transmite con menos potencia que el router
+    const cells = [];
+    for (const r of plan.rooms) {
+      for (let x = r.x + 0.25; x < r.x + r.w; x += 0.5) for (let y = r.y + 0.25; y < r.y + r.h; y += 0.5) {
+        const pred = rssiFrom(src, x, y, r.floor || 0, band === '5' ? '5' : '2.4') - UPLINK;
+        cells.push({ x, y, f: r.floor || 0, room: r, err: Math.abs(pred - rssi), pred });
+      }
+    }
+    let res;
+    if (!cells.length) res = null;
+    else {
+      const best = Math.min(...cells.map((c) => c.err));
+      const tol = Math.max(4, best + 3);
+      const zone = cells.filter((c) => c.err <= tol);
+      // cuarto con más área compatible (ponderado por qué tan bien coincide)
+      const score = new Map();
+      for (const c of zone) score.set(c.room, (score.get(c.room) || 0) + 1 / (1 + c.err));
+      const room = [...score.entries()].sort((a, b) => b[1] - a[1])[0][0];
+      const inRoom = zone.filter((c) => c.room === room);
+      const cx = inRoom.reduce((s, c) => s + c.x, 0) / inRoom.length, cy = inRoom.reduce((s, c) => s + c.y, 0) / inRoom.length;
+      // punto de la zona más cercano al centro de la zona dentro de ese cuarto
+      const pt = inRoom.sort((a, b) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy))[0];
+      const maxPred = Math.max(...cells.map((c) => c.pred));
+      const minPred = Math.min(...cells.map((c) => c.pred));
+      // más débil que cualquier punto de la casa → probablemente afuera
+      const outside = rssi < minPred - 6;
+      const tooStrong = rssi > maxPred + 6;
+      res = { zone, room, x: pt.x, y: pt.y, floor: room.floor || 0, best, outside, tooStrong, share: inRoom.length / zone.length };
+    }
+    zoneCache.set(key, res);
+    if (zoneCache.size > 300) zoneCache.delete(zoneCache.keys().next().value);
+    return res;
+  }
+
+  /** Posición de cada dispositivo: la que pusiste a mano, o calculada con su señal y la forma de la casa. */
   function devicePositions() {
     if (!S || !plan) return [];
     const out = [];
@@ -152,18 +197,26 @@ const Plan = (() => {
       const base = { mac: d.mac, name: d.name, online: d.online, trusted: d.trusted, kind: d.kind, rssi: cl ? cl.rssi : null, band: cl ? cl.band : null, apId: cl ? cl.ap : null };
       if (man) { out.push({ ...base, x: man.x, y: man.y, floor: man.floor || 0, estimated: false }); continue; }
       if (!ap) continue;
-      const dist = distFromRssi(cl.rssi, cl.band);
-      const noData = cl.rssi === null || cl.rssi === undefined;
-      const r = noData ? 2 : dist === null ? Math.max(plan.w, plan.h) * 0.45 : dist;
       const f = ap.floor || 0;
-      // empieza en un ángulo fijo por aparato y busca un punto que caiga dentro de un cuarto
-      let a0 = hashAngle(d.mac), px = ap.x, py = ap.y;
-      for (let k = 0; k < 36; k++) {
-        const a = a0 + k * Math.PI / 18;
-        const x = ap.x + Math.cos(a) * r, y = ap.y + Math.sin(a) * r;
-        if (x >= 0 && y >= 0 && x <= plan.w && y <= plan.h) { px = x; py = y; if (roomAt(x, y, f)) break; }
+      const noData = cl.rssi === null || cl.rssi === undefined;
+      if (noData) {
+        // sin señal reportada (p. ej. el Telmex): cerca de su router
+        const a = hashAngle(d.mac);
+        out.push({ ...base, x: Math.max(0, Math.min(plan.w, ap.x + Math.cos(a) * 1.5)), y: Math.max(0, Math.min(plan.h, ap.y + Math.sin(a) * 1.5)), floor: f, estimated: true, nearOnly: true, ax: ap.x, ay: ap.y, ring: 1.5 });
+        continue;
       }
-      out.push({ ...base, x: Math.max(0, Math.min(plan.w, px)), y: Math.max(0, Math.min(plan.h, py)), floor: f, estimated: true, ring: r, ax: ap.x, ay: ap.y, far: dist === null });
+      if (cl.rssi <= -95) {
+        out.push({ ...base, x: plan.w + 0.6, y: Math.min(plan.h, 0.6 + (hashAngle(d.mac) % 1) * plan.h), floor: f, estimated: true, outside: true, zoneLabel: 'casi sin señal (¿afuera o muy lejos?)' });
+        continue;
+      }
+      const loc = locate(ap, cl.rssi, cl.band);
+      if (!loc) { out.push({ ...base, x: ap.x, y: ap.y, floor: f, estimated: true }); continue; }
+      if (loc.outside) {
+        out.push({ ...base, x: plan.w + 0.6, y: Math.max(0.5, Math.min(plan.h - 0.5, ap.y)), floor: f, estimated: true, outside: true, zoneLabel: 'probablemente afuera de la casa' });
+        continue;
+      }
+      out.push({ ...base, x: loc.x, y: loc.y, floor: loc.floor, estimated: true, zone: loc.zone, zoneRoom: loc.room.name,
+        zoneLabel: `probablemente en ${loc.room.name}${plan.floors.length > 1 ? ' (' + plan.floors[loc.floor] + ')' : ''}${loc.share < 0.5 ? ' o cerca' : ''}` });
     }
     return out;
   }
@@ -236,11 +289,12 @@ const Plan = (() => {
     if (plan.showDevs !== false) {
       for (const d of devicePositions()) {
         if ((d.floor || 0) !== cur) continue;
-        if (d.estimated && d.mac === hover) svg.append(h('svg:circle', { class: 'dev-ring', cx: d.ax * scale, cy: d.ay * scale, r: d.ring * scale }));
+        if (d.mac === hover && d.zone) for (const c of d.zone) if (c.f === cur) svg.append(h('svg:rect', { class: 'dev-zone', x: (c.x - 0.25) * scale, y: (c.y - 0.25) * scale, width: 0.5 * scale, height: 0.5 * scale }));
+        if (d.mac === hover && d.nearOnly) svg.append(h('svg:circle', { class: 'dev-ring', cx: d.ax * scale, cy: d.ay * scale, r: d.ring * scale }));
         const g = h('svg:g', { class: 'pdev' + (d.trusted ? '' : ' unk') + (d.online ? '' : ' off') + (d.estimated ? ' est' : ''), 'data-dev': d.mac, transform: `translate(${d.x * scale},${d.y * scale})` });
         g.append(h('svg:circle', { r: 7 }));
         g.append(h('svg:text', { y: -11, 'text-anchor': 'middle', text: (d.trusted ? '' : '? ') + d.name.slice(0, 18) }));
-        g.append(h('svg:title', { text: `${d.name}${d.rssi !== null ? ` · ${d.rssi} dBm en ${d.band} GHz` : ''}${d.estimated ? ' · posición estimada (arrástralo a donde está)' : ''}` }));
+        g.append(h('svg:title', { text: `${d.name}${d.rssi !== null ? ` · ${d.rssi} dBm en ${d.band} GHz` : ''}${d.zoneLabel ? ' · ' + d.zoneLabel : ''}${d.estimated ? ' · posición calculada (puedes arrastrarlo si sabes dónde está)' : ''}` }));
         g.addEventListener('pointerenter', () => { if (hover !== d.mac && !drag) { hover = d.mac; render(); } });
         svg.append(g);
       }
@@ -577,7 +631,8 @@ const Plan = (() => {
   /** Distancia (m, sin paredes) a la que la señal baja a −72 dBm: para el tamaño de las ondas en 3D. */
   function reach(b) { const B = BANDS[b === 'best' ? '2.4' : b]; return Math.pow(10, (B.ref + 72) / (10 * B.n)); }
   function view() { return { band, focus }; }
-  return { init, refresh, render, data, heatCanvas, setPin, saveModel, setSize, view, reach, levels: LEVELS };
+  function zoneOf(mac) { if (!plan && S) plan = Object.assign(defaults(), S.settings.plan || {}); if (!plan) return null; normalize(); const d = devicePositions().find((x) => x.mac === mac); return d ? (d.estimated ? d.zoneLabel || null : 'ubicado a mano') : null; }
+  return { init, refresh, render, data, heatCanvas, setPin, saveModel, setSize, view, reach, zoneOf, levels: LEVELS };
 })();
 window.Plan = Plan;
 Plan.init();

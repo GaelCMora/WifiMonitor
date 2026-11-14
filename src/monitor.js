@@ -38,6 +38,7 @@ class Monitor extends EventEmitter {
       aliases: {},         // mac (o ip) -> nombre
       checklist: {},       // id -> true
       clients: {},         // mac -> { name, ip, rssi, ap, band, t }  (lista de clientes del router)
+      links: [],           // lectura automática: [{ id, ap, band, login (curl), list (curl) }]
       trusted: {},         // mac -> true  (dispositivos marcados como "es mío")
       tickSec: 3,
       sweepSec: 60,
@@ -75,6 +76,7 @@ class Monitor extends EventEmitter {
     every(this.checkWifi, 20, 3);
     every(async () => { this.net = await sys.defaultRoute(); }, 120, 120);
     every(this.persist, 60, 60);
+    this.startLinks();
   }
 
   stop() { this.timers.forEach(clearInterval); this.persist(); }
@@ -341,8 +343,13 @@ class Monitor extends EventEmitter {
    * Lee el texto copiado de la página "Lista de clientes" de un router (cualquier marca):
    * busca en cada renglón una MAC, una IP y un número negativo (RSSI).
    */
-  importClients(text, ap, band) {
-    const t = Date.now();
+  importClients(text, ap, band, opts = {}) {
+    const found = this.parseClients(text);
+    if (opts.dry) return found;
+    return this.saveClients(found, ap, band, opts.quiet);
+  }
+
+  parseClients(text) {
     const found = [];
     const lines = String(text || '').split(/\r?\n/);
     let pendingName = '';
@@ -369,14 +376,51 @@ class Monitor extends EventEmitter {
       if (prev) { if (!prev.ip && entry.ip) prev.ip = entry.ip; continue; }
       found.push(entry);
     }
+    return found;
+  }
+
+  saveClients(found, ap, band, quiet) {
+    const t = Date.now();
     for (const f of found) {
       const cur = this.settings.clients[f.mac] || {};
       this.settings.clients[f.mac] = { name: f.name || cur.name || '', ip: f.ip || cur.ip || '', rssi: f.rssi, ap: String(ap || '').slice(0, 40), band: band === '5' ? '5' : '2.4', t };
     }
     this.saveSettings();
-    if (found.length) this.event(0, `Lista de clientes importada (${found.length} aparatos en ${this.apName(ap)} ${band === '5' ? '5' : '2.4'} GHz)`, 'clients');
+    if (found.length && !quiet) this.event(0, `Lista de clientes importada (${found.length} aparatos en ${this.apName(ap)} ${band === '5' ? '5' : '2.4'} GHz)`, 'clients');
     this.emit('devices');
     return found;
+  }
+
+  // ------------------------------- lectura automática de routers (cURL)
+  startLinks() {
+    const { RouterLink } = require('./routerlink');
+    this.links = new Map();
+    for (const cfg of this.settings.links || []) this.addLink(cfg, RouterLink);
+    if (!this.linkTimer) this.linkTimer = setInterval(() => this.pollLinks(), 120000);
+    setTimeout(() => this.pollLinks(), 5000);
+  }
+
+  addLink(cfg, RouterLink = require('./routerlink').RouterLink) {
+    const link = new RouterLink(cfg, (text, dry) => this.importClients(text, cfg.ap, cfg.band, { dry, quiet: true }));
+    this.links.set(cfg.id, link);
+    return link;
+  }
+
+  async pollLinks() {
+    for (const link of this.links.values()) {
+      const was = link.status.ok;
+      const st = await link.poll();
+      if (st.ok === false && was !== false) this.event(1, `No se pudo leer ${this.apName(link.cfg.ap)} (${link.cfg.band} GHz): ${st.error}`, 'clients');
+      if (st.ok && was === false) this.event(0, `Lectura de ${this.apName(link.cfg.ap)} restablecida`, 'clients');
+    }
+    this.emit('devices');
+  }
+
+  linkStatus() {
+    return (this.settings.links || []).map((c) => {
+      const l = this.links && this.links.get(c.id);
+      return { id: c.id, ap: c.ap, band: c.band, hasLogin: !!c.login, status: l ? l.status : null };
+    });
   }
 
   apName(ip) {
