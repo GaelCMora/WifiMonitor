@@ -9,7 +9,7 @@ Panel web para vigilar la red de tu casa: módem, internet, DNS, la línea de ca
 Necesitas [Node.js 18 o más nuevo](https://nodejs.org) y [Git](https://git-scm.com).
 
 ```bash
-git clone https://github.com/GaelCMora/wifimonitor
+git clone https://github.com/GaelCMora/WifiMonitor
 cd wifimonitor
 npm install
 npm link
@@ -18,7 +18,7 @@ npm link
 `npm link` deja disponible el comando `wifimonitor` en cualquier terminal. También puedes instalarlo directo sin clonar:
 
 ```bash
-npm install -g github:GaelCMora/wifimonitor
+npm install -g github:GaelCMora/WifiMonitor
 ```
 
 ## Usar
