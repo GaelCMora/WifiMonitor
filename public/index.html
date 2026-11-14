@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0d0d0d">
+  <meta name="theme-color" content="#0f1724">
   <title>WiFi Monitor</title>
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="manifest" href="/manifest.webmanifest">
@@ -19,6 +19,7 @@
     </div>
     <div class="top-actions">
       <button id="btnQr" class="btn ghost"><svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM5 5v3h3V5zM14 3h7v7h-7zM16 5v3h3V5zM3 14h7v7H3zM5 16v3h3v-3zM14 14h3v3h-3zM18 18h3v3h-3zM18 14h3v2h-3zM14 18h2v3h-2z"/></svg><span>Abrir en el celular</span></button>
+      <button id="btnTour" class="btn ghost" title="Recorrido guiado"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 17h-2v-2h2v2zm2.1-7.7-.9.9A3.4 3.4 0 0 0 13 15h-2v-.5a4 4 0 0 1 1.2-2.8l1.2-1.3A2 2 0 1 0 10 9H8a4 4 0 1 1 7.1 2.3z"/></svg><span>Recorrido</span></button>
       <button id="btnTheme" class="btn icon ghost" title="Cambiar tema" aria-label="Cambiar tema"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg></button>
     </div>
   </header>
@@ -37,28 +38,28 @@
   <main id="main">
     <!-- RESUMEN -->
     <section id="tab-resumen" class="tab on">
-      <div class="grid hero-grid">
-        <div class="card hero">
-          <div class="ring" id="ring"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="ring-bg"/><circle cx="60" cy="60" r="52" class="ring-fg" id="ringFg"/></svg><div class="ring-txt"><b id="score">—</b><span>de 100</span></div></div>
-          <div class="hero-txt">
-            <div class="eyebrow">Salud de la red</div>
-            <h1 id="healthLabel">Midiendo…</h1>
-            <ul id="healthWhy" class="why"></ul>
-            <div class="hero-net" id="heroNet"></div>
+      <div class="hero">
+        <div class="hero-house">
+          <div id="houseMini" class="house-mini" aria-label="Tu casa en 3D"></div>
+          <div class="hero-house-foot">
+            <span class="key"><i style="background:#3987e5"></i>Tus aparatos</span>
+            <span class="key"><i style="background:#fab219"></i>Sin reconocer</span>
+            <span class="key"><i style="background:rgba(12,163,12,.7)"></i>Buena señal</span>
+            <span class="key"><i style="background:rgba(208,59,59,.7)"></i>Mala señal</span>
+            <button class="link" data-goto="casa">Editar la casa</button>
           </div>
         </div>
-        <div class="tiles" id="tiles"></div>
-      </div>
-
-      <div class="grid two house-row">
-        <div class="card house-card">
-          <div class="card-head"><div><h2>Tu casa</h2><p class="sub" id="houseSub">Señal estimada y dónde están tus aparatos.</p></div><button class="link" data-goto="casa">Editar →</button></div>
-          <div id="houseMini" class="house-mini"></div>
-          <div class="legend house-legend"><span><i class="bx" style="background:#3987e5;border-radius:50%"></i>Tus aparatos</span><span><i class="bx" style="background:#fab219;border-radius:50%"></i>Sin reconocer</span><span><i class="bx" style="background:rgba(12,163,12,.6)"></i>Buena señal</span><span><i class="bx" style="background:rgba(208,59,59,.6)"></i>Mala señal</span></div>
-        </div>
-        <div class="card">
-          <div class="card-head"><h2>Quién está conectado</h2><button class="link" data-goto="equipos">Ver todos →</button></div>
-          <div id="whoBox" class="who"></div>
+        <div class="hero-side">
+          <div class="health">
+            <div class="ring" id="ring"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="ring-bg"/><circle cx="60" cy="60" r="52" class="ring-fg" id="ringFg"/></svg><div class="ring-txt"><b id="score">—</b><span>de 100</span></div></div>
+            <div>
+              <p class="health-k">Salud de la red</p>
+              <h1 id="healthLabel">Midiendo…</h1>
+            </div>
+          </div>
+          <ul id="healthWhy" class="why"></ul>
+          <div class="readings" id="tiles"></div>
+          <p class="hero-net" id="heroNet"></p>
         </div>
       </div>
 
@@ -76,13 +77,17 @@
         <div class="chart" id="latChart"></div>
       </div>
 
-      <div class="grid two">
+      <div class="grid three">
         <div class="card">
-          <div class="card-head"><h2>Qué mejorar</h2><button class="link" data-goto="mejoras">Ver todo →</button></div>
+          <div class="card-head"><h2>Qué mejorar</h2><button class="link" data-goto="mejoras">Ver todo</button></div>
           <div id="advTop" class="adv-list compact"></div>
         </div>
         <div class="card">
-          <div class="card-head"><h2>Últimos eventos</h2><button class="link" data-goto="eventos">Ver todo →</button></div>
+          <div class="card-head"><h2>Quién está conectado</h2><button class="link" data-goto="equipos">Ver todos</button></div>
+          <div id="whoBox" class="who"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Últimos eventos</h2><button class="link" data-goto="eventos">Ver todo</button></div>
           <ul id="evTop" class="events compact"></ul>
         </div>
       </div>
@@ -317,5 +322,6 @@
   <script src="/app.js"></script>
   <script src="/plan.js"></script>
   <script src="/admin.js"></script>
+  <script src="/tour.js"></script>
 </body>
 </html>

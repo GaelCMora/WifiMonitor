@@ -336,6 +336,14 @@ async function handle(req, res) {
       if (t === 'flushdns') return send(res, 200, await tools.flushDns());
       return send(res, 404, { error: 'herramienta desconocida' });
     }
+    const fm = p.match(/^\/fonts\/(ibm-plex-(sans|mono)-latin-\d{3}-normal\.woff2)$/);
+    if (fm) {
+      try {
+        const fp = path.join(path.dirname(require.resolve(`@fontsource/ibm-plex-${fm[2]}/package.json`)), 'files', fm[1]);
+        res.writeHead(200, { 'Content-Type': 'font/woff2', 'Cache-Control': 'max-age=604800' });
+        return fs.createReadStream(fp).pipe(res);
+      } catch { return send(res, 404, 'no'); }
+    }
     if (p.startsWith('/vendor/three/') && THREE_DIR) {
       const fp = path.join(THREE_DIR, path.normalize(p.slice(14)).replace(/^([/\\])+/, ''));
       if (!fp.startsWith(THREE_DIR) || !fs.existsSync(fp)) return send(res, 404, 'no');

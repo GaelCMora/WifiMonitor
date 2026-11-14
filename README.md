@@ -63,7 +63,10 @@ Opciones de `wifimonitor on`:
 
 ## Qué hace
 
-- **Resumen:** calificación de salud de la red, latencia al módem y a internet en vivo con los cortes marcados, DNS, dispositivos y velocidad de internet.
+La primera vez que lo abres en la PC arranca un **recorrido guiado** paso a paso; lo puedes repetir con el botón **Recorrido**.
+
+
+- **Resumen:** tu casa en 3D girando con la señal estimada y tus aparatos, calificación de salud de la red, latencia al módem y a internet en vivo con los cortes marcados, quién está conectado a cada router, DNS y velocidad de internet.
 - **Probar señal:** desde el celular, mide bajada, subida, latencia y variación en cada cuarto y con cada red (2.4 GHz, 5 GHz, repetidor).
 - **Casa:**
   - Plano 2D de la casa por pisos: dibujas los cuartos y arrastras el módem y los repetidores a donde están.
@@ -71,7 +74,7 @@ Opciones de `wifimonitor on`:
   - Sugiere el mejor lugar para poner un repetidor.
   - **Vista 3D** con Three.js.
   - Diagrama de cómo está conectada la red y ranking de señal por cuarto.
-- **Dispositivos:** quién está conectado, de qué fabricante es, su latencia, y cuándo y cuántas veces se desconecta. Puedes ponerle nombre, marcar cuáles son tuyos (te avisa si se conecta uno desconocido) e importar la lista de clientes del router para ver su nombre real, a qué router y banda están conectados y con cuánta señal; con eso se ubican aproximadamente en el plano.
+- **Dispositivos:** quién está conectado, de qué fabricante es, su latencia, y cuándo y cuántas veces se desconecta. Puedes ponerle nombre y marcar cuáles son tuyos (te avisa si se conecta uno desconocido). Al **conectar la app con tu router** (automático, con cualquier marca: copias desde F12 las peticiones de inicio de sesión y de la lista de clientes como cURL) lee cada 2 minutos el nombre real de cada aparato, a qué router y banda está conectado y con cuánta señal, y con la forma de tu casa calcula **en qué cuarto está** (o si probablemente está afuera).
 - **Línea:** para internet por cable (Izzi, Megacable…), lee la potencia, la SNR y los errores del módem (`192.168.100.1`) y te dice si están en rango.
 - **Administrar:** accesos a los paneles de tus routers y guía de dónde está cada opción en tu modelo. Herramientas: ping, traceroute, comparar DNS, limpiar caché DNS y Wake-on-LAN.
 - **Mejoras:** recomendaciones calculadas con lo que se midió, por ejemplo:

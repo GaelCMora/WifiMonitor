@@ -148,8 +148,17 @@ function tile(k, v, unit, d, level, goto) {
     h('div', { class: 'd', text: d || '' }));
 }
 
+function reading(k, v, unit, d, level, goto) {
+  const lvlTxt = { good: 'bien', warning: 'revisar', serious: 'mal', critical: 'falla' }[level] || '';
+  return h('button', { type: 'button', class: 'reading', 'data-goto': goto || null, disabled: goto ? null : true },
+    h('span', { class: 'r-k' }, level ? h('i', { class: 'dot ' + level, title: lvlTxt }) : h('i', { class: 'dot' }), k),
+    h('span', { class: 'r-v' + (/^[\d.,—\s-]+$/.test(String(v)) ? '' : ' txt') }, v, unit ? h('small', { text: ' ' + unit }) : null),
+    h('span', { class: 'r-d', text: d || '' }));
+}
+
 function renderTiles() {
   const s = S.summary; const box = $('#tiles'); box.replaceChildren();
+  const tile = reading;
   const gwLvl = s.flags.gwDown ? 'critical' : s.gwLoss > 5 ? 'serious' : msLevel(s.gwAvg, 10, 40);
   box.append(tile('Módem', fmt.ms(s.gwAvg), 'ms', s.flags.gwDown ? 'No responde' : `pérdida ${s.gwLoss ?? 0}%`, gwLvl));
   const netLvl = s.flags.netDown ? 'critical' : s.netLoss > 5 ? 'serious' : msLevel(s.netAvg, 40, 90);
